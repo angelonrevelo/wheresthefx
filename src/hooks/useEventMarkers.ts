@@ -81,7 +81,7 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         } : null
       }));
 
-      return groupEventsByProximity(transformedData, 100);
+      return groupEventsByProximity(transformedData, 50);
     },
     staleTime: 5 * 60 * 1000,
   });
