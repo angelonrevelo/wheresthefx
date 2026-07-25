@@ -1,0 +1,22 @@
+{
+  "name": "@wheresthefx/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared contracts: event taxonomy, Manila-time helpers, request/response schemas",
+  "exports": {
+    ".": "./src/index.ts",
+    "./category": "./src/category.ts",
+    "./time": "./src/time.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  }
+}
