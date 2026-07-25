@@ -24,7 +24,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@wheresthefx/db';
 import { event, savedEvent, sourcePost } from '@wheresthefx/db';
-import { eq, gte, lte, and, or, ilike, asc, sql, count, type SQL } from 'drizzle-orm';
+import { eq, gte, lte, and, or, ilike, asc, sql, count, inArray, type SQL } from 'drizzle-orm';
 import { manilaToday, normalizeCategory } from '@wheresthefx/core';
 import { optionalAuth } from '../middleware/auth.js';
 import {
@@ -39,6 +39,31 @@ import {
 /** Mirrors `eventStatusEnum` in the schema. */
 const EVENT_STATUS = ['confirmed', 'rescheduled', 'cancelled', 'postponed', 'tentative'] as const;
 type EventStatus = (typeof EVENT_STATUS)[number];
+
+
+/**
+ * Which of `eventIdList` the account has saved.
+ *
+ * Scoped to the page being rendered. The previous version selected the
+ * account's entire saved set on every list request just to compute a
+ * boolean for at most 100 rows — unbounded as a user's saves grow.
+ */
+async function loadSavedIdFor(
+  accountId: number | undefined,
+  eventIdList: number[],
+): Promise<Set<number>> {
+  if (accountId === undefined || eventIdList.length === 0) return new Set();
+
+  const row = await db
+    .select({ eventId: savedEvent.eventId })
+    .from(savedEvent)
+    .where(and(
+      eq(savedEvent.accountId, accountId),
+      inArray(savedEvent.eventId, eventIdList),
+    ));
+
+  return new Set(row.map(entry => entry.eventId));
+}
 
 const router = Router();
 
@@ -84,6 +109,17 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Invalid venue_id' });
       return;
     }
+
+    // A malformed date is rejected rather than silently dropped: quietly
+    // ignoring a filter the caller asked for returns wrong data that looks
+    // right, which is worse than an error.
+    for (const key of ['date_from', 'date_to'] as const) {
+      if (req.query[key] !== undefined && parseIsoDate(req.query[key]) === undefined) {
+        res.status(400).json({ error: `Invalid ${key}, expected YYYY-MM-DD` });
+        return;
+      }
+    }
+
 
     const pageNum = parseBoundedInt(req.query.page, { min: 1, max: 10_000, fallback: 1 });
     const limitNum = parseBoundedInt(req.query.limit, { min: 1, max: 100, fallback: 20 });
@@ -144,19 +180,11 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
       offset,
     });
 
-    // Check saved status if authenticated
-    let savedEventIds = new Set<number>();
-    if (req.user) {
-      const saved = await db
-        .select({ eventId: savedEvent.eventId })
-        .from(savedEvent)
-        .where(eq(savedEvent.accountId, req.user.userId));
-      savedEventIds = new Set(saved.map(s => s.eventId));
-    }
+    const savedId = await loadSavedIdFor(req.user?.userId, results.map(row => row.id));
 
-    const data = results.map(e => ({
-      ...e,
-      isSaved: savedEventIds.has(e.id),
+    const data = results.map(row => ({
+      ...row,
+      isSaved: savedId.has(row.id),
     }));
 
     res.json({
@@ -198,20 +226,12 @@ router.get('/upcoming', optionalAuth, async (req: Request, res: Response) => {
       limit,
     });
 
-    // Check saved status
-    let savedEventIds = new Set<number>();
-    if (req.user) {
-      const saved = await db
-        .select({ eventId: savedEvent.eventId })
-        .from(savedEvent)
-        .where(eq(savedEvent.accountId, req.user.userId));
-      savedEventIds = new Set(saved.map(s => s.eventId));
-    }
+    const savedId = await loadSavedIdFor(req.user?.userId, results.map(row => row.id));
 
     res.json({
-      data: results.map(e => ({
-        ...e,
-        isSaved: savedEventIds.has(e.id),
+      data: results.map(row => ({
+        ...row,
+        isSaved: savedId.has(row.id),
       })),
     });
   } catch (err) {
@@ -237,6 +257,16 @@ router.get('/map', async (req: Request, res: Response) => {
     if (categoryParam !== undefined && normalizeCategory(categoryParam) === null) {
       res.status(400).json({ error: `Unknown category: ${categoryParam}` });
       return;
+    }
+
+    // A malformed date is rejected rather than silently dropped: quietly
+    // ignoring a filter the caller asked for returns wrong data that looks
+    // right, which is worse than an error.
+    for (const key of ['date_from', 'date_to'] as const) {
+      if (req.query[key] !== undefined && parseIsoDate(req.query[key]) === undefined) {
+        res.status(400).json({ error: `Invalid ${key}, expected YYYY-MM-DD` });
+        return;
+      }
     }
 
     const condition: SQL[] = [

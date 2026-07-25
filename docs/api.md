@@ -256,14 +256,21 @@ Toggle save/unsave an event.
 
 Get account's preferred categories.
 
+**Response:**
+
+```json
+{ "category": ["music", "nightlife", "food"] }
+```
+
 ### PUT /users/me/preferences
 
-Update preferred categories.
+Replace preferred categories. Values are validated against the canonical
+taxonomy; an unrecognised value returns 400 rather than being stored.
 
 **Request:**
 
 ```json
-{ "categories": ["music", "nightlife", "food"] }
+{ "category": ["music", "nightlife", "food"] }
 ```
 
 ---
@@ -282,7 +289,58 @@ Proxy Instagram images with local cache fallback.
 
 Returns the image binary with correct content-type headers.
 
-**Why it exists:** Instagram CDN URLs expire after ~24 hours. This proxy first tries fetching the CDN URL. If it fails (403/410), it falls back to locally cached images stored by blead at `BLEAD_IMAGE_DIR/{shortcode}/`.
+**Why it exists:** Instagram CDN URLs expire within hours. The proxy checks
+the local cache at `BLEAD_IMAGES_PATH/{shortcode}/` **first** (instant, no
+network), falls back to the CDN with a 5s timeout, and writes successful
+CDN responses back into the cache.
+
+**Validation.** Both parameters are attacker-controlled and both are
+checked before use:
+
+| Rule | Rejected with |
+|------|---------------|
+| `url` must be `https:` | 400 |
+| `url` host must be `*.cdninstagram.com` or `*.fbcdn.net` (dot-anchored) | 400 |
+| `url` must not be an IP literal or carry credentials | 400 |
+| `shortcode` must match `^[A-Za-z0-9_-]{1,64}$` | ignored (no cache hit) |
+| Upstream `Content-Type` must be jpeg/png/webp/gif | 415 |
+| Response larger than 8MB | 413 |
+
+Redirects are not followed (`redirect: 'manual'`), so an allowlisted host
+cannot bounce the proxy into the internal network.
+
+---
+
+## Health
+
+### GET /health
+
+Liveness plus dependency check. Returns 503 if PostgreSQL is unreachable.
+
+```json
+{
+  "status": "ok",
+  "database": "ok",
+  "ingest": { "last_sync_at": "2026-07-26T02:00:00.000Z", "is_stale": false },
+  "checked_at": "2026-07-26T02:31:00.000Z"
+}
+```
+
+`status` is `degraded` when no ingest has completed in the last 24 hours.
+The endpoint previously returned `ok` without touching the database, so it
+stayed green through a four-month ingest outage.
+
+---
+
+## Rate Limits
+
+| Scope | Window | Limit |
+|-------|--------|-------|
+| `/api/*` | 1 min | 300 |
+| `/api/auth/*` | 15 min | 20 (successful requests not counted) |
+| `/api/images/proxy` | 1 min | 200 |
+
+Exceeding a limit returns 429 with `{ "error": "Too many requests" }`.
 
 ---
 

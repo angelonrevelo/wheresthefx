@@ -80,16 +80,20 @@ export async function login(email: string, password: string) {
 }
 
 export async function getMe() {
-  return apiFetch<{ id: number; email: string; username: string; display_name?: string; preferences: string[] }>('/api/users/me');
+  // Profile lives on the auth router, not the users router.
+  return apiFetch<{
+    id: number;
+    email: string;
+    username: string;
+    display_name?: string;
+    preference: string[];
+  }>('/api/auth/me');
 }
 
 export function logout() {
   clearToken();
 }
 
-// ============================================================================
-// IMAGE PROXY
-// ============================================================================
 
 /**
  * Build the best available image URL for an event.
@@ -227,10 +231,14 @@ export async function fetchSavedEvents() {
   return apiFetch<{ data: EventData[] }>('/api/users/me/saved');
 }
 
-export async function updatePreferences(categories: string[]) {
-  return apiFetch<{ categories: string[] }>('/api/users/me/preferences', {
+export async function fetchPreference() {
+  return apiFetch<{ category: string[] }>('/api/users/me/preferences');
+}
+
+export async function updatePreference(category: string[]) {
+  return apiFetch<{ category: string[] }>('/api/users/me/preferences', {
     method: 'PUT',
-    body: JSON.stringify({ categories }),
+    body: JSON.stringify({ category }),
   });
 }
 
