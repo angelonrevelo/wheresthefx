@@ -44,98 +44,103 @@
 
 ### Setup
 
+This is an npm workspace monorepo — install once at the root.
+
 ```bash
 # 1. Create PostgreSQL database
 psql -c "CREATE DATABASE wheresthefx;"
 
-# 2. Install server deps + push schema
-cd server
+# 2. Configure environment
+cp .env.example .env
+# JWT_SECRET is required and must be 32+ chars — the API refuses to start
+# without it. Generate one with: openssl rand -base64 48
+
+# 3. Install everything
 npm install
-./node_modules/.bin/drizzle-kit push
 
-# 3. Run ingest from blead
-BLEAD_DB_PATH=../blead/data/ig-events.db \
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wheresthefx \
-npx tsx src/scripts/ingest-from-blead.ts
+# 4. Apply the schema
+npm run db:migrate
 
-# 4. Start server
-npx tsx src/index.ts
+# 5. Run ingest (needs data/ig-events.db — see docs/ingest.md)
+npm run ingest --workspace @wheresthefx/api
 
-# 5. Install frontend deps + start
-cd ..
-npm install
-npm run dev
+# 6. Start the API and the client, in separate shells
+npm run dev:api    # → http://localhost:3001
+npm run dev:web    # → http://localhost:5173
 ```
+
+### Verifying
+
+```bash
+npm run typecheck   # all workspaces, strict
+npm run lint
+npm run test
+```
+
+These three are the gate CI enforces on every push.
 
 ### Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
-| Variable          | Description                     | Default                                                     |
-| ----------------- | ------------------------------- | ----------------------------------------------------------- |
-| `DATABASE_URL`    | PostgreSQL connection string    | `postgresql://postgres:postgres@localhost:5432/wheresthefx` |
-| `JWT_SECRET`      | Secret for JWT token signing    | `your-secret-key-change-in-production`                      |
-| `BLEAD_DB_PATH`   | Path to blead's SQLite database | `../blead/data/ig-events.db`                                |
-| `BLEAD_IMAGE_DIR` | Path to blead's cached images   | `../blead/data/ig-images`                                   |
-| `PORT`            | Server port                     | `3001`                                                      |
-| `CORS_ORIGIN`     | Allowed CORS origin             | `http://localhost:5173`                                     |
-| `VITE_API_URL`    | API base URL (frontend)         | `http://localhost:3001`                                     |
+| Variable            | Description                          | Default                                                     |
+| ------------------- | ------------------------------------ | ----------------------------------------------------------- |
+| `DATABASE_URL`      | PostgreSQL connection string         | `postgresql://postgres:postgres@localhost:5432/wheresthefx` |
+| `JWT_SECRET`        | **Required.** 32+ chars, no default. | — (startup fails without it)                                |
+| `BLEAD_DB_PATH`     | Source SQLite for the ingest         | `./data/ig-events.db`                                       |
+| `BLEAD_IMAGES_PATH` | Local image cache, if present        | — (proxy falls back to CDN)                                 |
+| `PORT`              | API port                             | `3001`                                                      |
+| `CORS_ORIGIN`       | Allowed origin, comma-separated      | `http://localhost:5173`                                     |
+| `VITE_API_URL`      | API base URL (client)                | `http://localhost:3001`                                     |
 
 ## Project Structure
 
+An npm workspace monorepo. Directory names are singular, per
+[CONVENTIONS.md](CONVENTIONS.md).
+
 ```
 wheresthefx/
-├── docs/                       # Documentation
-│   ├── CONVENTIONS.md           # Code/database/API conventions
-│   ├── api.md                   # API reference
-│   ├── schema.md                # Database schema reference
-│   └── ingest.md                # Ingest pipeline docs
-├── server/                      # Express.js backend
-│   ├── src/
-│   │   ├── db/
-│   │   │   ├── schema.ts        # Drizzle ORM schema (9 tables)
-│   │   │   ├── connection.ts    # PostgreSQL connection
-│   │   │   └── migrate.ts       # Migration runner
-│   │   ├── middleware/
-│   │   │   ├── auth.ts          # JWT auth middleware
-│   │   │   └── snakeCase.ts     # camelCase → snake_case response transform
-│   │   ├── routes/
-│   │   │   ├── auth.ts          # Register, login, me
-│   │   │   ├── events.ts        # Event CRUD + map/upcoming
-│   │   │   ├── venues.ts        # Venue directory
-│   │   │   ├── categories.ts    # Category metadata
-│   │   │   └── users.ts         # Saved events, preferences
-│   │   ├── scripts/
-│   │   │   ├── ingest-from-blead.ts   # SQLite → PG sync
-│   │   │   └── geocode-venues.ts      # Venue geocoding
-│   │   └── index.ts             # Express server entry
-│   ├── drizzle.config.ts
-│   └── package.json
-├── src/                         # React frontend (Vite)
-│   ├── api/
-│   │   └── client.ts            # API client (snake_case types)
-│   ├── components/              # React components
-│   │   ├── EventMap.tsx          # Leaflet map
-│   │   ├── EventSidebar.tsx      # Sidebar with nearby events
-│   │   ├── EventPopup.tsx        # Mobile event popup
-│   │   ├── EventSidePanel.tsx    # Desktop event panel
-│   │   ├── MapFilters.tsx        # Search, date, price filters
-│   │   ├── CategoryFilter.tsx    # Category chip filters
-│   │   └── ui/                   # shadcn/ui components
-│   ├── hooks/                    # React hooks
-│   │   ├── useEventMarkers.ts    # Fetch + cluster events
-│   │   ├── useSavedEvents.ts     # User's saved events
-│   │   └── useUserPreferences.ts
-│   ├── pages/
-│   │   ├── Index.tsx             # Landing + map view
-│   │   ├── Auth.tsx              # Login/register
-│   │   └── Admin.tsx             # Admin dashboard
-│   └── utils/
-│       └── markerUtils.ts        # Map marker clustering
-├── .agents/workflows/            # Agent workflow definitions
-├── .env.example
-└── package.json
+├── app/
+│   ├── api/                     # Express REST API  (@wheresthefx/api)
+│   │   └── src/
+│   │       ├── lib/param.ts     # Validated query/route param parsing
+│   │       ├── middleware/      # auth (JWT), snakeCase response
+│   │       ├── routes/          # events, venues, categories, auth, users
+│   │       ├── scripts/         # ingest, dedup, geocode
+│   │       └── index.ts         # App entry, CORS, image proxy, health
+│   └── web/                     # Vite + React client  (@wheresthefx/web)
+│       └── src/
+│           ├── api/client.ts    # API client
+│           ├── components/      # events, badges, map, shared, ui
+│           ├── hooks/
+│           ├── pages/           # Index (map), Auth, NotFound
+│           ├── types/filter.ts  # Map filter shape
+│           └── utils/           # markerUtils, dateRange, dateUtils
+├── package/
+│   ├── core/                    # Shared contracts  (@wheresthefx/core)
+│   │   └── src/
+│   │       ├── category.ts      # THE canonical 12-category taxonomy
+│   │       └── time.ts          # Manila-time helpers
+│   ├── db/                      # Schema + migration  (@wheresthefx/db)
+│   │   ├── migration/           # Drizzle migrations (versioned)
+│   │   └── src/schema.ts        # 9 tables — single source of truth
+│   └── ingest/                  # In-house scrape + AI pipeline (in progress)
+├── docs/
+├── data/                        # gitignored — recovered SQLite, backups
+└── package.json                 # Workspace root
 ```
+
+### Why the shared packages exist
+
+`package/db` holds the only copy of the schema. Previously the API and
+the ingest each kept their own, which is how the ingest came to write
+~20 columns that did not exist — Drizzle discards unknown keys silently,
+so it looked like it was working while writing NULLs.
+
+`package/core` holds anything both sides must agree on. The category
+taxonomy lived in three places with three different value sets, and the
+sync between them collapsed five of the twelve categories to `other` on
+every run.
 
 ## Data Pipeline
 
@@ -161,19 +166,25 @@ The `ingest-from-blead.ts` script syncs data:
 Run every 6 hours via cron on the VPS:
 
 ```bash
-0 */6 * * * cd /path/to/wheresthefx/server && npx tsx src/scripts/ingest-from-blead.ts
+0 0,6,12,18 * * * cd /path/to/wheresthefx && npm run ingest --workspace @wheresthefx/api
 ```
 
-### Current Data Stats (March 2026)
+### Data state (July 2026)
 
-| Table      | Count |
-| ---------- | ----- |
-| Venues     | 118   |
-| Accounts   | 157   |
-| Posts      | 1317  |
-| Events     | 230   |
-| Sub-events | 178   |
-| Geocoded   | 194   |
+The pipeline stopped running around 19 June 2026. The site and API stayed
+up, but inventory aged out — production holds 1,920 events of which only a
+handful are still upcoming. Bringing ingestion in-house is the active work.
+
+Recovered from the VPS into `data/` (gitignored):
+
+| Table          | Count |
+| -------------- | ----- |
+| Accounts       | 212   |
+| Posts          | 5,652 |
+| Events         | 2,368 |
+| Sub-events     | 2,740 |
+| Known venues   | 361   |
+| Image cache    | 3.6GB (left on the VPS) |
 
 ## API Reference
 
