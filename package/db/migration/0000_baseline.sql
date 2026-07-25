@@ -6,28 +6,28 @@ CREATE TYPE "public"."location_status" AS ENUM('confirmed', 'tba', 'secret', 'dm
 CREATE TYPE "public"."review_tier" AS ENUM('ready', 'quick', 'full', 'rejected', 'pending');--> statement-breakpoint
 CREATE TYPE "public"."sync_status" AS ENUM('running', 'completed', 'failed');--> statement-breakpoint
 CREATE TABLE "account" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"account_id" serial PRIMARY KEY NOT NULL,
 	"email" varchar(255) NOT NULL,
 	"username" varchar(50) NOT NULL,
 	"password_hash" text NOT NULL,
 	"display_name" text,
 	"avatar_url" text,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
+	"updated_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "account_email_unique" UNIQUE("email"),
 	CONSTRAINT "account_username_unique" UNIQUE("username")
 );
 --> statement-breakpoint
 CREATE TABLE "account_preference" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"account_preference_id" serial PRIMARY KEY NOT NULL,
 	"account_id" integer NOT NULL,
-	"preferred_categories" jsonb DEFAULT '[]'::jsonb,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"preferred_category" jsonb DEFAULT '[]'::jsonb,
+	"updated_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "account_preference_account_id_unique" UNIQUE("account_id")
 );
 --> statement-breakpoint
 CREATE TABLE "event" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"event_id" serial PRIMARY KEY NOT NULL,
 	"source_post_id" integer,
 	"source_account_id" integer,
 	"title" text NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE "event" (
 	"price" real,
 	"price_min" real,
 	"price_max" real,
-	"price_notes" text,
+	"price_note" text,
 	"signup_url" text,
 	"category" "event_category" DEFAULT 'other',
 	"artists" jsonb DEFAULT '[]'::jsonb,
@@ -60,20 +60,20 @@ CREATE TABLE "event" (
 	"image_url" text,
 	"source_username" text,
 	"event_hash" text,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
+	"updated_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "event_event_hash_unique" UNIQUE("event_hash")
 );
 --> statement-breakpoint
 CREATE TABLE "saved_event" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"saved_event_id" serial PRIMARY KEY NOT NULL,
 	"account_id" integer NOT NULL,
 	"event_id" integer NOT NULL,
-	"saved_at" timestamp DEFAULT now() NOT NULL
+	"saved_at" timestamptz DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "source_account" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"source_account_id" serial PRIMARY KEY NOT NULL,
 	"username" text NOT NULL,
 	"full_name" text,
 	"bio" text,
@@ -87,19 +87,19 @@ CREATE TABLE "source_account" (
 	"venue_type" text,
 	"category_distribution" jsonb,
 	"is_active" boolean DEFAULT true,
-	"last_scraped_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_scraped_at" timestamptz,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "source_account_username_unique" UNIQUE("username")
 );
 --> statement-breakpoint
 CREATE TABLE "source_post" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"source_post_id" serial PRIMARY KEY NOT NULL,
 	"account_id" integer,
 	"shortcode" text NOT NULL,
 	"post_url" text NOT NULL,
 	"post_type" text DEFAULT 'image',
 	"caption" text,
-	"posted_at" timestamp with time zone,
+	"posted_at" timestamptz,
 	"image_url" text,
 	"image_url_list" jsonb DEFAULT '[]'::jsonb,
 	"like_count" integer DEFAULT 0,
@@ -109,38 +109,38 @@ CREATE TABLE "source_post" (
 	"extraction_method" text DEFAULT 'pending',
 	"extraction_model" text,
 	"prompt_version" text,
-	"extracted_at" timestamp with time zone,
+	"extracted_at" timestamptz,
 	"ai_confidence" real,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "source_post_shortcode_unique" UNIQUE("shortcode")
 );
 --> statement-breakpoint
 CREATE TABLE "sub_event" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"sub_event_id" serial PRIMARY KEY NOT NULL,
 	"event_id" integer NOT NULL,
 	"title" text NOT NULL,
 	"event_date" date,
 	"event_time" text,
 	"end_time" text,
 	"description" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamptz DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "sync_log" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"started_at" timestamp DEFAULT now() NOT NULL,
-	"completed_at" timestamp,
+	"sync_log_id" serial PRIMARY KEY NOT NULL,
+	"started_at" timestamptz DEFAULT now() NOT NULL,
+	"completed_at" timestamptz,
 	"status" "sync_status" DEFAULT 'running' NOT NULL,
-	"accounts_synced" integer DEFAULT 0,
-	"posts_synced" integer DEFAULT 0,
-	"events_synced" integer DEFAULT 0,
-	"venues_synced" integer DEFAULT 0,
-	"sub_events_synced" integer DEFAULT 0,
+	"account_synced_count" integer DEFAULT 0,
+	"post_synced_count" integer DEFAULT 0,
+	"event_synced_count" integer DEFAULT 0,
+	"venue_synced_count" integer DEFAULT 0,
+	"sub_event_synced_count" integer DEFAULT 0,
 	"error_message" text
 );
 --> statement-breakpoint
 CREATE TABLE "venue" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"venue_id" serial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"alias" jsonb DEFAULT '[]'::jsonb,
 	"address" text,
@@ -149,20 +149,20 @@ CREATE TABLE "venue" (
 	"lng" real,
 	"category" text,
 	"instagram_handle" text,
-	"geocode_attempted_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now(),
+	"geocode_attempted_at" timestamptz,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
+	"updated_at" timestamptz DEFAULT now(),
 	CONSTRAINT "venue_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
-ALTER TABLE "account_preference" ADD CONSTRAINT "account_preference_account_id_account_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."account"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "event" ADD CONSTRAINT "event_source_post_id_source_post_id_fk" FOREIGN KEY ("source_post_id") REFERENCES "public"."source_post"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "event" ADD CONSTRAINT "event_source_account_id_source_account_id_fk" FOREIGN KEY ("source_account_id") REFERENCES "public"."source_account"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "event" ADD CONSTRAINT "event_venue_id_venue_id_fk" FOREIGN KEY ("venue_id") REFERENCES "public"."venue"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "saved_event" ADD CONSTRAINT "saved_event_account_id_account_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."account"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "saved_event" ADD CONSTRAINT "saved_event_event_id_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "source_post" ADD CONSTRAINT "source_post_account_id_source_account_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."source_account"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sub_event" ADD CONSTRAINT "sub_event_event_id_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "account_preference" ADD CONSTRAINT "account_preference_account_id_account_account_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."account"("account_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "event" ADD CONSTRAINT "event_source_post_id_source_post_source_post_id_fk" FOREIGN KEY ("source_post_id") REFERENCES "public"."source_post"("source_post_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "event" ADD CONSTRAINT "event_source_account_id_source_account_source_account_id_fk" FOREIGN KEY ("source_account_id") REFERENCES "public"."source_account"("source_account_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "event" ADD CONSTRAINT "event_venue_id_venue_venue_id_fk" FOREIGN KEY ("venue_id") REFERENCES "public"."venue"("venue_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "saved_event" ADD CONSTRAINT "saved_event_account_id_account_account_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."account"("account_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "saved_event" ADD CONSTRAINT "saved_event_event_id_event_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("event_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "source_post" ADD CONSTRAINT "source_post_account_id_source_account_source_account_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."source_account"("source_account_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sub_event" ADD CONSTRAINT "sub_event_event_id_event_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("event_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_account_email" ON "account" USING btree ("email");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_account_username" ON "account" USING btree ("username");--> statement-breakpoint
 CREATE INDEX "idx_event_date" ON "event" USING btree ("event_date");--> statement-breakpoint

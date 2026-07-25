@@ -1,5 +1,5 @@
 {
-  "id": "dccacf5b-fd29-4597-88d9-d5d41636a83a",
+  "id": "74641063-6ef9-4317-a4ec-d2e0159d954b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -8,8 +8,8 @@
       "name": "account",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "account_id": {
+          "name": "account_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -46,14 +46,14 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -117,8 +117,8 @@
       "name": "account_preference",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "account_preference_id": {
+          "name": "account_preference_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -129,8 +129,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "preferred_categories": {
-          "name": "preferred_categories",
+        "preferred_category": {
+          "name": "preferred_category",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,
@@ -138,7 +138,7 @@
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -146,15 +146,15 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "account_preference_account_id_account_id_fk": {
-          "name": "account_preference_account_id_account_id_fk",
+        "account_preference_account_id_account_account_id_fk": {
+          "name": "account_preference_account_id_account_account_id_fk",
           "tableFrom": "account_preference",
           "tableTo": "account",
           "columnsFrom": [
             "account_id"
           ],
           "columnsTo": [
-            "id"
+            "account_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -178,8 +178,8 @@
       "name": "event",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "event_id": {
+          "name": "event_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -295,8 +295,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "price_notes": {
-          "name": "price_notes",
+        "price_note": {
+          "name": "price_note",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -391,14 +391,14 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -497,41 +497,41 @@
         }
       },
       "foreignKeys": {
-        "event_source_post_id_source_post_id_fk": {
-          "name": "event_source_post_id_source_post_id_fk",
+        "event_source_post_id_source_post_source_post_id_fk": {
+          "name": "event_source_post_id_source_post_source_post_id_fk",
           "tableFrom": "event",
           "tableTo": "source_post",
           "columnsFrom": [
             "source_post_id"
           ],
           "columnsTo": [
-            "id"
+            "source_post_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "event_source_account_id_source_account_id_fk": {
-          "name": "event_source_account_id_source_account_id_fk",
+        "event_source_account_id_source_account_source_account_id_fk": {
+          "name": "event_source_account_id_source_account_source_account_id_fk",
           "tableFrom": "event",
           "tableTo": "source_account",
           "columnsFrom": [
             "source_account_id"
           ],
           "columnsTo": [
-            "id"
+            "source_account_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "event_venue_id_venue_id_fk": {
-          "name": "event_venue_id_venue_id_fk",
+        "event_venue_id_venue_venue_id_fk": {
+          "name": "event_venue_id_venue_venue_id_fk",
           "tableFrom": "event",
           "tableTo": "venue",
           "columnsFrom": [
             "venue_id"
           ],
           "columnsTo": [
-            "id"
+            "venue_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -555,8 +555,8 @@
       "name": "saved_event",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "saved_event_id": {
+          "name": "saved_event_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -575,7 +575,7 @@
         },
         "saved_at": {
           "name": "saved_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -620,28 +620,28 @@
         }
       },
       "foreignKeys": {
-        "saved_event_account_id_account_id_fk": {
-          "name": "saved_event_account_id_account_id_fk",
+        "saved_event_account_id_account_account_id_fk": {
+          "name": "saved_event_account_id_account_account_id_fk",
           "tableFrom": "saved_event",
           "tableTo": "account",
           "columnsFrom": [
             "account_id"
           ],
           "columnsTo": [
-            "id"
+            "account_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "saved_event_event_id_event_id_fk": {
-          "name": "saved_event_event_id_event_id_fk",
+        "saved_event_event_id_event_event_id_fk": {
+          "name": "saved_event_event_id_event_event_id_fk",
           "tableFrom": "saved_event",
           "tableTo": "event",
           "columnsFrom": [
             "event_id"
           ],
           "columnsTo": [
-            "id"
+            "event_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -657,8 +657,8 @@
       "name": "source_account",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "source_account_id": {
+          "name": "source_account_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -796,8 +796,8 @@
       "name": "source_post",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "source_post_id": {
+          "name": "source_post_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -951,15 +951,15 @@
         }
       },
       "foreignKeys": {
-        "source_post_account_id_source_account_id_fk": {
-          "name": "source_post_account_id_source_account_id_fk",
+        "source_post_account_id_source_account_source_account_id_fk": {
+          "name": "source_post_account_id_source_account_source_account_id_fk",
           "tableFrom": "source_post",
           "tableTo": "source_account",
           "columnsFrom": [
             "account_id"
           ],
           "columnsTo": [
-            "id"
+            "source_account_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -983,8 +983,8 @@
       "name": "sub_event",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "sub_event_id": {
+          "name": "sub_event_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
@@ -1027,7 +1027,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1051,15 +1051,15 @@
         }
       },
       "foreignKeys": {
-        "sub_event_event_id_event_id_fk": {
-          "name": "sub_event_event_id_event_id_fk",
+        "sub_event_event_id_event_event_id_fk": {
+          "name": "sub_event_event_id_event_event_id_fk",
           "tableFrom": "sub_event",
           "tableTo": "event",
           "columnsFrom": [
             "event_id"
           ],
           "columnsTo": [
-            "id"
+            "event_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -1075,22 +1075,22 @@
       "name": "sync_log",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "sync_log_id": {
+          "name": "sync_log_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true
         },
         "started_at": {
           "name": "started_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "completed_at": {
           "name": "completed_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -1102,36 +1102,36 @@
           "notNull": true,
           "default": "'running'"
         },
-        "accounts_synced": {
-          "name": "accounts_synced",
+        "account_synced_count": {
+          "name": "account_synced_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "default": 0
         },
-        "posts_synced": {
-          "name": "posts_synced",
+        "post_synced_count": {
+          "name": "post_synced_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "default": 0
         },
-        "events_synced": {
-          "name": "events_synced",
+        "event_synced_count": {
+          "name": "event_synced_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "default": 0
         },
-        "venues_synced": {
-          "name": "venues_synced",
+        "venue_synced_count": {
+          "name": "venue_synced_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "default": 0
         },
-        "sub_events_synced": {
-          "name": "sub_events_synced",
+        "sub_event_synced_count": {
+          "name": "sub_event_synced_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
@@ -1156,8 +1156,8 @@
       "name": "venue",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "venue_id": {
+          "name": "venue_id",
           "type": "serial",
           "primaryKey": true,
           "notNull": true

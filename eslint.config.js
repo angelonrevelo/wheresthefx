@@ -18,7 +18,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/migration/**',
       'data/**',
-      'app/web/src/components/ui/**', // vendored shadcn primitives
+      'app/web/src/component/ui/**', // vendored shadcn primitives
     ],
   },
 
@@ -62,6 +62,10 @@ export default tseslint.config(
       // `any` is the main type-safety hole in this codebase (the whole map
       // data path is untyped). Warn now, ratchet to error as it is paid down.
       '@typescript-eslint/no-explicit-any': 'warn',
+      // A zero-width space is the only way to write `*/` inside a block
+      // comment. script/validate-copy.ts needs it to document its own
+      // JSX-comment handling; the rule still applies to real code.
+      'no-irregular-whitespace': ['error', { skipComments: true }],
     },
   },
 

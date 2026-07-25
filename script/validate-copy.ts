@@ -59,6 +59,20 @@ function walk(dir: string, out: string[] = []): string[] {
  * the file. Since a missed comment only costs a false positive, and a swallowed file costs a
  * silent miss, this errs toward reporting.
  */
+/**
+ * Blank `{/* ... *​/}` before the scanner runs.
+ *
+ * The scanner below reads JSX text as code, so an apostrophe in prose ("don't load until
+ * needed") opens a phantom string and every mode decision after it is wrong -- which is how a
+ * JSX comment two lines earlier got reported as user-facing copy. JSX comments have an
+ * unambiguous delimiter pair that no string can span, so removing them first is exact where
+ * the general scanner is only conservative.
+ */
+function blankJsxComment(source: string): string {
+  return source.replace(/\{\/\*[\s\S]*?\*\/\}/g, (match) =>
+    match.replace(/[^\n]/g, ' '));
+}
+
 function blankComment(source: string): string {
   let out = '';
   let at = 0;
@@ -107,7 +121,7 @@ for (const root of SCAN_ROOT) {
     const source = readFileSync(file, 'utf8');
     if (!source.includes(EM_DASH)) continue;
 
-    const stripped = blankComment(source);
+    const stripped = blankComment(blankJsxComment(source));
     stripped.split('\n').forEach((line, index) => {
       if (!line.includes(EM_DASH)) return;
       violation.push({

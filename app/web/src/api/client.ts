@@ -138,10 +138,10 @@ export interface EventData {
   price?: number | null;
   price_min?: number | null;
   price_max?: number | null;
-  price_notes?: string | null;
+  price_note?: string | null;
   signup_url?: string | null;
   category: string;
-  artists?: string[];
+  artist?: string[];
   event_status: string;
   availability_status?: string;
   image_url?: string | null;
@@ -152,7 +152,7 @@ export interface EventData {
   source_post_shortcode?: string | null;
   source_post_url?: string | null;
   venue?: any;
-  sub_events?: any[];
+  sub_event?: any[];
   source_post?: any;
   source_account?: any;
 }
@@ -169,7 +169,7 @@ export interface EventsResponse {
 
 export async function fetchEvents(params: Record<string, string> = {}) {
   const query = new URLSearchParams(params).toString();
-  return apiFetch<EventsResponse>(`/api/events${query ? '?' + query : ''}`);
+  return apiFetch<EventsResponse>(`/api/event${query ? '?' + query : ''}`);
 }
 
 export async function fetchUpcomingEvents(limit = 50) {
@@ -198,7 +198,7 @@ export async function fetchVenue(id: number) {
 }
 
 export async function fetchVenueEvents(venueId: number) {
-  return apiFetch<{ data: EventData[] }>(`/api/venues/${venueId}/events`);
+  return apiFetch<{ data: EventData[] }>(`/api/venues/${venueId}/event`);
 }
 
 // ============================================================================
