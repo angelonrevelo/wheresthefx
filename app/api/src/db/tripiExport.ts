@@ -18,9 +18,13 @@
  *
  * Selected into snake_case aliases so a row IS the wire shape, matching tripi's rule that
  * `{Table}Row` interfaces mirror their columns exactly. This is also the single place that
- * bridges the two naming worlds while the PK rename is in flight: the Drizzle properties are
- * camelCase (`event.eventDate`) and the primary keys are still bare `id`, so `event_id: event.id`
- * below is the one line that changes when `event.event_id` lands.
+ * bridges the two naming worlds: the Drizzle properties are camelCase (`event.eventDate`,
+ * `event.eventId`) while everything downstream of this file is snake_case.
+ *
+ * That boundary already earned its keep. The `{table}_id` primary-key rename landed while this
+ * feed was being written, and it touched five lines -- all of them here. The mapper in
+ * `package/core` and the route above it did not change, because neither had ever seen a column
+ * name.
  *
  * ## Why the query builder is exported separately from the finder
  *
@@ -56,7 +60,7 @@ export type EventDraftRow = EventSource;
 export function venueExportQuery() {
   return db
     .select({
-      venue_id: venue.id,
+      venue_id: venue.venueId,
       name: venue.name,
       address: venue.address,
       city: venue.city,
@@ -65,7 +69,7 @@ export function venueExportQuery() {
       category: venue.category,
     })
     .from(venue)
-    .orderBy(asc(venue.id));
+    .orderBy(asc(venue.venueId));
 }
 
 export async function findVenueForExport(): Promise<VenueDraftRow[]> {
@@ -94,7 +98,7 @@ export function eventExportQuery(sinceDate?: string) {
 
   return db
     .select({
-      event_id: event.id,
+      event_id: event.eventId,
       title: event.title,
       event_date: event.eventDate,
       event_end_date: event.eventEndDate,
@@ -118,8 +122,8 @@ export function eventExportQuery(sinceDate?: string) {
       source_url: sql<string | null>`coalesce(${sourcePost.postUrl}, ${event.signupUrl})`,
     })
     .from(event)
-    .leftJoin(venue, eq(event.venueId, venue.id))
-    .leftJoin(sourcePost, eq(event.sourcePostId, sourcePost.id))
+    .leftJoin(venue, eq(event.venueId, venue.venueId))
+    .leftJoin(sourcePost, eq(event.sourcePostId, sourcePost.sourcePostId))
     .where(and(
       gte(event.eventDate, floor),
       eq(event.eventStatus, 'confirmed'),
