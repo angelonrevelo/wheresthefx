@@ -16,17 +16,14 @@ interface UserOnboardingProps {
 export function UserOnboarding({ open, onComplete }: UserOnboardingProps) {
   const [step, setStep] = useState<'accounts' | 'tags'>('accounts');
   const { data: accounts, isLoading: accountsLoading } = usePopularAccounts(30);
-  const { updatePreferences } = useUserPreferences();
+  const { updatePreference } = useUserPreferences();
   
   const handleAccountsNext = () => {
     setStep('tags');
   };
   
   const handleTagsComplete = (selectedTags: string[]) => {
-    updatePreferences({
-      interest_tags: selectedTags,
-      has_completed_onboarding: true,
-    });
+    updatePreference(selectedTags);
     
     toast.success("Preferences saved! Your map is now personalized.");
     onComplete(selectedTags);

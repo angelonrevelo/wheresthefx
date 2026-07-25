@@ -14,6 +14,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '@wheresthefx/db';
 import { venue, event } from '@wheresthefx/db';
 import { eq, gte, asc, and, count } from 'drizzle-orm';
+import { manilaToday } from '@wheresthefx/core';
 import { parseId } from '../lib/param.js';
 
 const router = Router();
@@ -27,7 +28,7 @@ const router = Router();
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = manilaToday();
 
     const results = await db
       .select({
@@ -101,7 +102,7 @@ router.get('/:id/events', async (req: Request, res: Response) => {
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = manilaToday();
 
     const results = await db.query.event.findMany({
       where: and(

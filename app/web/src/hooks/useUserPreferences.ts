@@ -1,41 +1,62 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getMe, updatePreferences as apiUpdatePreferences, isLoggedIn } from "@/api/client";
+import { fetchPreference, updatePreference, isLoggedIn } from "@/api/client";
 
-interface UserPreferences {
-  interest_tags?: string[];
-  has_completed_onboarding?: boolean;
+const PREFERENCE_KEY = ['user-preference'] as const;
+
+/**
+ * Onboarding completion is tracked client-side.
+ *
+ * It used to be derived as `preference.length > 0`, which meant a user
+ * who deliberately picked no interests was shown the onboarding flow on
+ * every single session, forever, with no way to dismiss it.
+ */
+const ONBOARDING_KEY = 'wtfx_onboarding_complete';
+
+function readOnboardingComplete(): boolean {
+  try {
+    return localStorage.getItem(ONBOARDING_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function markOnboardingComplete(): void {
+  try {
+    localStorage.setItem(ONBOARDING_KEY, 'true');
+  } catch {
+    // Private browsing / storage disabled — onboarding simply reappears.
+  }
 }
 
 export function useUserPreferences() {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['user-preferences'],
+    queryKey: PREFERENCE_KEY,
     queryFn: async () => {
       if (!isLoggedIn()) return null;
-      const user = await getMe();
-      const prefs = Array.isArray(user.preferences) ? user.preferences : [];
-      return {
-        preferences: { interest_tags: prefs } satisfies UserPreferences,
-        has_completed_onboarding: prefs.length > 0,
-      };
+      const { category } = await fetchPreference();
+      return { interestTag: Array.isArray(category) ? category : [] };
     },
   });
 
-  const updatePrefsMutation = useMutation({
-    mutationFn: async (preferences: UserPreferences) => {
+  const mutation = useMutation({
+    mutationFn: async (interestTag: string[]) => {
       if (!isLoggedIn()) throw new Error('Not authenticated');
-      await apiUpdatePreferences(preferences.interest_tags || []);
+      await updatePreference(interestTag);
+      markOnboardingComplete();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+      queryClient.invalidateQueries({ queryKey: PREFERENCE_KEY });
     },
   });
 
   return {
-    preferences: query.data?.preferences,
-    hasCompletedOnboarding: query.data?.has_completed_onboarding,
+    interestTag: query.data?.interestTag,
+    // Undefined while loading, so callers can distinguish "not yet known"
+    // from "genuinely not done" and avoid flashing the onboarding sheet.
+    hasCompletedOnboarding: query.isLoading ? undefined : readOnboardingComplete(),
     isLoading: query.isLoading,
-    updatePreferences: updatePrefsMutation.mutate,
+    updatePreference: mutation.mutate,
   };
 }

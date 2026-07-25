@@ -2,13 +2,13 @@
  * Auth Routes — Account registration and login
  *
  * Provides JWT-based authentication endpoints.
- * Passwords are hashed with bcrypt (10 salt rounds).
+ * Passwords are hashed with bcrypt (12 salt rounds).
  * Tokens expire in 7 days.
  *
  * ## Endpoints
  * - POST /api/auth/register — Create new account
  * - POST /api/auth/login    — Login with email + password
- * - GET  /api/users/me      — Get current account profile (auth required)
+ * - GET  /api/auth/me       — Get current account profile (auth required)
  */
 
 import { Router, Request, Response } from 'express';
@@ -23,17 +23,41 @@ const router = Router();
 
 /** Validation schema for registration */
 const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().email('Invalid email address').max(255),
   username: z.string().min(3, 'Username must be at least 3 characters').max(50),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  displayName: z.string().optional(),
+  // bcrypt silently truncates at 72 bytes, so anything past that is a lie
+  // about how strong the password is. Bounded explicitly.
+  password: z.string()
+    .min(10, 'Password must be at least 10 characters')
+    .max(72, 'Password must be at most 72 characters'),
+  display_name: z.string().max(100).optional(),
 });
 
 /** Validation schema for login */
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
+  email: z.string().email().max(255),
+  password: z.string().max(72),
 });
+
+/**
+ * A valid bcrypt hash of a value no user can supply.
+ *
+ * Login used to return 401 immediately when the email was unknown,
+ * skipping bcrypt entirely. That ~100ms difference made the whole user
+ * table enumerable by timing alone. Comparing against this dummy keeps
+ * the unknown-email path the same cost as the wrong-password path.
+ */
+const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+
+/** Narrow a zod failure to a single, client-usable message. */
+function zodMessage(err: z.ZodError): string {
+  return err.issues[0]?.message ?? 'Invalid request body';
+}
+
+/** PostgreSQL unique-violation. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && err.code === '23505';
+}
 
 /**
  * POST /api/auth/register
@@ -41,45 +65,35 @@ const loginSchema = z.object({
  * Create a new account. Returns a JWT token on success.
  * Also creates an empty account_preference row for the new account.
  *
- * Request body: { email, username, password, displayName? }
+ * Request body: { email, username, password, display_name? }
  * Response: { token, user: { id, email, username, displayName } }
  */
 router.post('/register', async (req: Request, res: Response) => {
   try {
     const data = registerSchema.parse(req.body);
+    const email = data.email.trim().toLowerCase();
 
-    // Check if email or username already exists
-    const existing = await db.query.account.findFirst({
-      where: (u, { or, eq: e }) => or(e(u.email, data.email), e(u.username, data.username)),
-    });
+    const passwordHash = await bcrypt.hash(data.password, 12);
 
-    if (existing) {
-      res.status(409).json({
-        error: existing.email === data.email
-          ? 'Email already registered'
-          : 'Username already taken',
+    // Account and preference are created together: previously they were
+    // two autocommit statements, so a failure between them left an
+    // account with no preference row.
+    const user = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(account).values({
+        email,
+        username: data.username,
+        passwordHash,
+        displayName: data.display_name,
+      }).returning();
+
+      await tx.insert(accountPreference).values({
+        accountId: created.id,
+        preferredCategories: [],
       });
-      return;
-    }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(data.password, 10);
-
-    // Insert account
-    const [user] = await db.insert(account).values({
-      email: data.email,
-      username: data.username,
-      passwordHash,
-      displayName: data.displayName,
-    }).returning();
-
-    // Create empty preferences
-    await db.insert(accountPreference).values({
-      accountId: user.id,
-      preferredCategories: [],
+      return created;
     });
 
-    // Generate token
     const token = generateToken({
       userId: user.id,
       email: user.email,
@@ -97,9 +111,20 @@ router.post('/register', async (req: Request, res: Response) => {
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: err.errors[0].message });
+      res.status(400).json({ error: zodMessage(err) });
       return;
     }
+
+    // Uniqueness is enforced by the database rather than by a prior
+    // SELECT. The check-then-insert version had a race that turned two
+    // concurrent signups into a 500, and its distinct "email taken" vs
+    // "username taken" messages made the user table enumerable. One
+    // message, both cases.
+    if (isUniqueViolation(err)) {
+      res.status(409).json({ error: 'Those credentials are not available' });
+      return;
+    }
+
     console.error('Registration error:', err);
     res.status(500).json({ error: 'Registration failed' });
   }
@@ -116,20 +141,17 @@ router.post('/register', async (req: Request, res: Response) => {
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
+    const email = data.email.trim().toLowerCase();
 
-    // Find account by email
     const user = await db.query.account.findFirst({
-      where: eq(account.email, data.email),
+      where: eq(account.email, email),
     });
 
-    if (!user) {
-      res.status(401).json({ error: 'Invalid email or password' });
-      return;
-    }
+    // bcrypt.compare runs on every path, including the unknown-email one,
+    // so response time does not reveal whether the account exists.
+    const isValid = await bcrypt.compare(data.password, user?.passwordHash ?? DUMMY_HASH);
 
-    // Verify password
-    const valid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!valid) {
+    if (!user || !isValid) {
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
@@ -152,7 +174,7 @@ router.post('/login', async (req: Request, res: Response) => {
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: err.errors[0].message });
+      res.status(400).json({ error: zodMessage(err) });
       return;
     }
     console.error('Login error:', err);
@@ -161,12 +183,12 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/users/me
+ * GET /api/auth/me
  *
  * Get the current authenticated account's profile.
  * Requires a valid Bearer token.
  *
- * Response: { id, email, username, displayName, preferences }
+ * Response: { id, email, username, displayName, preference }
  */
 router.get('/me', authenticate, async (req: Request, res: Response) => {
   try {
@@ -187,7 +209,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       email: user.email,
       username: user.username,
       displayName: user.displayName,
-      preferences: user.preference?.preferredCategories || [],
+      preference: user.preference?.preferredCategories ?? [],
     });
   } catch (err) {
     console.error('Profile fetch error:', err);
