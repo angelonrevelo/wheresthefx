@@ -11,6 +11,11 @@
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
+    "lint:naming": "tsx script/validate-naming.ts",
+    "lint:copy": "tsx script/validate-copy.ts",
+    "//lint:lock": "The exact check the server runs. `npm ci --omit=dev` refuses to install when package.json and package-lock.json disagree, so a version typed by hand into one and not the other does not fail here, or in the tests, or in the build — it fails halfway through a deploy. Costs a second from cache.",
+    "lint:lock": "npm ci --dry-run",
+    "check": "npm run lint:naming && npm run lint:copy && npm run lint && npm run typecheck && npm run test",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:web": "npm run dev --workspace @wheresthefx/web",
@@ -27,6 +32,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vitest": "^2.1.9"

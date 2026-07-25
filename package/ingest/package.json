@@ -1,0 +1,29 @@
+{
+  "name": "@wheresthefx/ingest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Instagram event scraping and AI extraction — the in-house data pipeline",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "scrape": "tsx src/cli.ts scrape",
+    "extract": "tsx src/cli.ts extract"
+  },
+  "dependencies": {
+    "@google-cloud/vertexai": "^1.9.3",
+    "@google/generative-ai": "^0.24.0",
+    "@wheresthefx/core": "*",
+    "@wheresthefx/db": "*",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.39.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  }
+}
