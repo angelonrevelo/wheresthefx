@@ -49,7 +49,7 @@ CREATE TABLE "event" (
 	"price_note" text,
 	"signup_url" text,
 	"category" "event_category" DEFAULT 'other',
-	"artists" jsonb DEFAULT '[]'::jsonb,
+	"artist" jsonb DEFAULT '[]'::jsonb,
 	"event_status" "event_status" DEFAULT 'confirmed',
 	"availability_status" "availability_status" DEFAULT 'available',
 	"is_recurring" boolean DEFAULT false,
@@ -136,7 +136,10 @@ CREATE TABLE "sync_log" (
 	"event_synced_count" integer DEFAULT 0,
 	"venue_synced_count" integer DEFAULT 0,
 	"sub_event_synced_count" integer DEFAULT 0,
-	"error_message" text
+	"error_count" integer DEFAULT 0,
+	"unknown_category_count" integer DEFAULT 0,
+	"error_message" text,
+	"created_at" timestamptz DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "venue" (
@@ -177,4 +180,5 @@ CREATE INDEX "idx_source_account_is_active" ON "source_account" USING btree ("is
 CREATE INDEX "idx_source_post_account" ON "source_post" USING btree ("account_id");--> statement-breakpoint
 CREATE INDEX "idx_source_post_is_event" ON "source_post" USING btree ("is_event");--> statement-breakpoint
 CREATE INDEX "idx_sub_event_event" ON "sub_event" USING btree ("event_id");--> statement-breakpoint
+CREATE INDEX "idx_sync_log_started_at" ON "sync_log" USING btree ("started_at");--> statement-breakpoint
 CREATE INDEX "idx_venue_geocode_attempted_at" ON "venue" USING btree ("geocode_attempted_at");

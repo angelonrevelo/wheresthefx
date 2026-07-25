@@ -48,7 +48,7 @@
  * and storage efficiency. Drizzle maps these to TypeScript union types.
  *
  * **JSONB for arrays:**
- * Fields like `artists`, `image_urls`, and `aliases` use JSONB
+ * Fields like `artist` and `alias` use JSONB
  * instead of TEXT with JSON strings for native PostgreSQL querying.
  *
  * ## Category Mapping
@@ -295,7 +295,7 @@ export const sourcePost = pgTable('source_post', {
  * - `venue_id` + `venue_name`: The FK provides normalized venue
  *   reference; the denormalized name enables fast display without joins.
  *
- * - `artists` (JSONB): Array of performer names ["DJ Name", "Band Name"].
+ * - `artist` (JSONB): Array of performer names ["DJ Name", "Band Name"].
  *
  * - `completeness_score` (0-1): Quality score based on how many fields
  *   are filled. Used for dedup ranking — when two events have the same
@@ -340,7 +340,7 @@ export const event = pgTable('event', {
 
   // Classification
   category: eventCategoryEnum('category').default('other'),
-  artists: jsonb('artists').$type<string[]>().default([]),
+  artist: jsonb('artist').$type<string[]>().default([]),
 
   // Status
   eventStatus: eventStatusEnum('event_status').default('confirmed'),
@@ -481,8 +481,18 @@ export const syncLog = pgTable('sync_log', {
   eventSyncedCount: integer('event_synced_count').default(0),
   venueSyncedCount: integer('venue_synced_count').default(0),
   subEventSyncedCount: integer('sub_event_synced_count').default(0),
+  /** Rows that failed and were skipped. A run that drops a third of its
+   *  input still logged as `completed` before this column existed. */
+  errorCount: integer('error_count').default(0),
+  /** Categories the extractor invented. Non-zero means the taxonomy and
+   *  the prompt have drifted apart and someone needs to look. */
+  unknownCategoryCount: integer('unknown_category_count').default(0),
   errorMessage: text('error_message'),
-});
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  // The freshness check in /api/health orders by this.
+  index('idx_sync_log_started_at').on(table.startedAt),
+]);
 
 // ============================================================================
 // RELATIONS (for Drizzle's relational query builder)

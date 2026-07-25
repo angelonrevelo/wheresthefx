@@ -1,5 +1,5 @@
 {
-  "id": "74641063-6ef9-4317-a4ec-d2e0159d954b",
+  "id": "277f6b5b-cfbd-4e46-9e13-18e1f52c4783",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -315,8 +315,8 @@
           "notNull": false,
           "default": "'other'"
         },
-        "artists": {
-          "name": "artists",
+        "artist": {
+          "name": "artist",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,
@@ -1137,14 +1137,51 @@
           "notNull": false,
           "default": 0
         },
+        "error_count": {
+          "name": "error_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "unknown_category_count": {
+          "name": "unknown_category_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
         "error_message": {
           "name": "error_message",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_sync_log_started_at": {
+          "name": "idx_sync_log_started_at",
+          "columns": [
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

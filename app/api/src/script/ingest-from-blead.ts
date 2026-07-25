@@ -164,7 +164,7 @@ interface BleadEvent {
   price_note: string | null;
   signup_url: string | null;
   category: string;
-  artists: string | null;
+  artist: string | null;
   event_status: string;
   availability_status: string;
   is_recurring: number;
@@ -423,7 +423,7 @@ async function syncEvents(): Promise<number> {
     const sourceAccountId = e.username ? accountIdMap.get(e.username) || null : null;
     const sourcePostId = e.shortcode ? postIdMap.get(e.shortcode) || null : null;
     const venueId = e.venue_name ? venueIdMap.get(e.venue_name.toLowerCase()) || null : null;
-    const artists = safeJsonParse<string[]>(e.artists, []);
+    const artists = safeJsonParse<string[]>(e.artist, []);
 
     if (!e.event_hash) continue; // Skip events without hash (can't dedup)
 

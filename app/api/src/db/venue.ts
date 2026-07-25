@@ -1,9 +1,12 @@
 import { db } from '@wheresthefx/db';
 import { event, venue } from '@wheresthefx/db';
-import { and, asc, count, eq, gte } from 'drizzle-orm';
+import { and, asc, count, eq, gte, inArray } from 'drizzle-orm';
 import type { Category } from '@wheresthefx/core';
 
 /** Venue and category data access. */
+
+/** Mirrors the gate in `event.ts`: counts must match what is served. */
+const PUBLIC_REVIEW_TIER = ['ready', 'quick'] as const;
 
 /** Venues with a count of their upcoming confirmed events. */
 export async function listVenueWithEventCount(today: string) {
@@ -24,6 +27,7 @@ export async function listVenueWithEventCount(today: string) {
         eq(event.venueId, venue.venueId),
         eq(event.eventStatus, 'confirmed'),
         gte(event.eventDate, today),
+        inArray(event.reviewTier, [...PUBLIC_REVIEW_TIER]),
       ),
     )
     .groupBy(venue.venueId)
@@ -41,6 +45,7 @@ export async function listEventAtVenue(venueId: number, today: string, limit: nu
       eq(event.venueId, venueId),
       eq(event.eventStatus, 'confirmed'),
       gte(event.eventDate, today),
+      inArray(event.reviewTier, [...PUBLIC_REVIEW_TIER]),
     ),
     orderBy: [asc(event.eventDate), asc(event.eventTime)],
     limit,
@@ -52,7 +57,11 @@ export async function countEventByCategory(today: string): Promise<Map<Category,
   const rowList = await db
     .select({ category: event.category, total: count() })
     .from(event)
-    .where(and(gte(event.eventDate, today), eq(event.eventStatus, 'confirmed')))
+    .where(and(
+      gte(event.eventDate, today),
+      eq(event.eventStatus, 'confirmed'),
+      inArray(event.reviewTier, [...PUBLIC_REVIEW_TIER]),
+    ))
     .groupBy(event.category);
 
   const countByCategory = new Map<Category, number>();

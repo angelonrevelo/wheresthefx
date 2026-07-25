@@ -9,8 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "scrape": "tsx src/cli.ts scrape",
-    "extract": "tsx src/cli.ts extract"
+    "reingest": "tsx src/command/reingest.ts"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.9.3",
@@ -18,9 +17,11 @@
     "@wheresthefx/core": "*",
     "@wheresthefx/db": "*",
     "dotenv": "^16.5.0",
+    "better-sqlite3": "^11.8.1",
     "drizzle-orm": "^0.39.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.16.5",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3",

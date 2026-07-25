@@ -30,6 +30,22 @@ export interface EventListFilter {
 }
 
 /**
+ * Tiers the public API is willing to serve.
+ *
+ * `review_tier` was computed by the pipeline and read by nothing, so
+ * `/api/events` served `rejected` and `pending` rows identically to
+ * verified ones. This is the single largest lever on perceived data
+ * quality in the product: everything below `quick` is held back for
+ * review rather than shown to users as fact.
+ */
+const PUBLIC_REVIEW_TIER = ['ready', 'quick'] as const;
+
+/** Restrict a query to events good enough to show. */
+function publicQualityGate(): SQL {
+  return inArray(event.reviewTier, [...PUBLIC_REVIEW_TIER]);
+}
+
+/**
  * Canonical ordering for every user-facing event list.
  *
  * Promotion slots in ahead of chronology here, once and only once. It is
@@ -40,7 +56,7 @@ function eventOrdering() {
 }
 
 function buildListCondition(filter: EventListFilter): SQL[] {
-  const condition: SQL[] = [eq(event.eventStatus, filter.status)];
+  const condition: SQL[] = [eq(event.eventStatus, filter.status), publicQualityGate()];
 
   if (filter.category) condition.push(eq(event.category, filter.category));
   if (filter.dateFrom) condition.push(gte(event.eventDate, filter.dateFrom));
@@ -91,7 +107,11 @@ export async function listEvent(filter: EventListFilter) {
 /** Upcoming confirmed events from `today` forward. */
 export async function listUpcomingEvent(today: string, limit: number) {
   return db.query.event.findMany({
-    where: and(gte(event.eventDate, today), eq(event.eventStatus, 'confirmed')),
+    where: and(
+      gte(event.eventDate, today),
+      eq(event.eventStatus, 'confirmed'),
+      publicQualityGate(),
+    ),
     with: { venue: true, subEvent: true },
     orderBy: eventOrdering(),
     limit,
@@ -111,6 +131,7 @@ export async function listMapEvent(filter: MapFilter) {
   const condition: SQL[] = [
     sql`${event.venueLat} IS NOT NULL`,
     eq(event.eventStatus, 'confirmed'),
+    publicQualityGate(),
     gte(
       event.eventDate,
       filter.dateFrom && filter.dateFrom > filter.today ? filter.dateFrom : filter.today,
