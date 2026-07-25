@@ -18,7 +18,7 @@
  * checks this repo needs that tripi does not (Drizzle property names, directory names,
  * ORM imports in routes). See docs/TRIPI.md for why the two gates are kept in sync.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,6 +34,7 @@ interface Violation {
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'meta', 'ui']);
 
 function walk(dir: string, extension: string[], out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIR.has(entry)) continue;
     const full = join(dir, entry);
@@ -44,6 +45,7 @@ function walk(dir: string, extension: string[], out: string[] = []): string[] {
 }
 
 function walkDir(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIR.has(entry)) continue;
     const full = join(dir, entry);
@@ -123,7 +125,13 @@ function checkTypescript(file: string): Violation[] {
   const violation: Violation[] = [];
   const line = readFileSync(file, 'utf8').split('\n');
   line.forEach((text, index) => {
-    const at = { file, line: index + 1, text: text.trim() };
+    // A line-level comment skip, not a full scanner: these patterns only match
+    // declaration syntax, so the only false positive is a comment quoting one --
+    // which this file's own docblock does.
+    const trimmed = text.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
+
+    const at = { file, line: index + 1, text: trimmed };
 
     for (const pattern of [PLURAL_COLLECTION, PLURAL_ARRAY_LITERAL]) {
       const match = pattern.exec(text);

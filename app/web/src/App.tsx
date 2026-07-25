@@ -1,15 +1,15 @@
 import { lazy, Suspense } from "react";
 import { ThemeProvider } from "next-themes";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/component/ui/toaster";
+import { Toaster as Sonner } from "@/component/ui/sonner";
+import { TooltipProvider } from "@/component/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
-import Index from "./pages/Index";
+import { ErrorBoundary } from "@/component/shared/ErrorBoundary";
+import Index from "./page/Index";
 
-const Auth = lazy(() => import("./pages/Auth"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+const Auth = lazy(() => import("./page/Auth"));
+const NotFound = lazy(() => import("./page/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {

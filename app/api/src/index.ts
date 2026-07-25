@@ -34,11 +34,11 @@ import { existsSync, readdirSync, createReadStream, mkdirSync, writeFileSync } f
 import { join } from 'path';
 import { sql } from '@wheresthefx/db';
 
-import eventsRouter from './routes/events.js';
-import venuesRouter from './routes/venues.js';
-import categoriesRouter from './routes/categories.js';
-import authRouter from './routes/auth.js';
-import usersRouter from './routes/users.js';
+import eventsRouter from './route/events.js';
+import venuesRouter from './route/venues.js';
+import categoriesRouter from './route/categories.js';
+import authRouter from './route/auth.js';
+import usersRouter from './route/users.js';
 import { snakeCaseResponse } from './middleware/snakeCase.js';
 import {
   MAX_IMAGE_BYTE,

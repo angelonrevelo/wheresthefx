@@ -197,7 +197,7 @@ export const syncStatusEnum = pgEnum('sync_status', [
  * Drizzle silently discarded them on every run.
  */
 export const venue = pgTable('venue', {
-  id: serial('id').primaryKey(),
+  venueId: serial('venue_id').primaryKey(),
   name: text('name').notNull().unique(),
   alias: jsonb('alias').$type<string[]>().default([]),
   address: text('address'),
@@ -225,7 +225,7 @@ export const venue = pgTable('venue', {
  * cannot fire, which measurably degrades category accuracy.
  */
 export const sourceAccount = pgTable('source_account', {
-  id: serial('id').primaryKey(),
+  sourceAccountId: serial('source_account_id').primaryKey(),
   username: text('username').notNull().unique(),
   fullName: text('full_name'),
   bio: text('bio'),
@@ -254,8 +254,8 @@ export const sourceAccount = pgTable('source_account', {
  * column went unwritten — so every row in production has a NULL image.
  */
 export const sourcePost = pgTable('source_post', {
-  id: serial('id').primaryKey(),
-  accountId: integer('account_id').references(() => sourceAccount.id),
+  sourcePostId: serial('source_post_id').primaryKey(),
+  accountId: integer('account_id').references(() => sourceAccount.sourceAccountId),
   shortcode: text('shortcode').notNull().unique(),
   postUrl: text('post_url').notNull(),
   postType: text('post_type').default('image'),
@@ -308,9 +308,9 @@ export const sourcePost = pgTable('source_post', {
  *   Served through the proxy endpoint which falls back to local cache.
  */
 export const event = pgTable('event', {
-  id: serial('id').primaryKey(),
-  sourcePostId: integer('source_post_id').references(() => sourcePost.id),
-  sourceAccountId: integer('source_account_id').references(() => sourceAccount.id),
+  eventId: serial('event_id').primaryKey(),
+  sourcePostId: integer('source_post_id').references(() => sourcePost.sourcePostId),
+  sourceAccountId: integer('source_account_id').references(() => sourceAccount.sourceAccountId),
 
   // Core event data
   title: text('title').notNull(),
@@ -321,7 +321,7 @@ export const event = pgTable('event', {
   description: text('description'),
 
   // Venue (FK + denormalized)
-  venueId: integer('venue_id').references(() => venue.id),
+  venueId: integer('venue_id').references(() => venue.venueId),
   venueName: text('venue_name'),     // Denormalized for fast display
   venueAddress: text('venue_address'),
   venueLat: real('venue_lat'),
@@ -333,7 +333,7 @@ export const event = pgTable('event', {
   price: real('price'),
   priceMin: real('price_min'),
   priceMax: real('price_max'),
-  priceNotes: text('price_notes'),
+  priceNote: text('price_note'),
 
   // Links
   signupUrl: text('signup_url'),
@@ -361,8 +361,8 @@ export const event = pgTable('event', {
   eventHash: text('event_hash').unique(),
 
   // Timestamps
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_event_date').on(table.eventDate),
   index('idx_event_category').on(table.category),
@@ -385,14 +385,14 @@ export const event = pgTable('event', {
  * Current data: 178 sub-events across 97 events (avg ~1.8 per event).
  */
 export const subEvent = pgTable('sub_event', {
-  id: serial('id').primaryKey(),
-  eventId: integer('event_id').references(() => event.id, { onDelete: 'cascade' }).notNull(),
+  subEventId: serial('sub_event_id').primaryKey(),
+  eventId: integer('event_id').references(() => event.eventId, { onDelete: 'cascade' }).notNull(),
   title: text('title').notNull(),
   eventDate: date('event_date'),
   eventTime: text('event_time'),
   endTime: text('end_time'),
   description: text('description'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_sub_event_event').on(table.eventId),
 ]);
@@ -411,14 +411,14 @@ export const subEvent = pgTable('sub_event', {
  * scraping pipeline. Users are consumers/discoverers only.
  */
 export const account = pgTable('account', {
-  id: serial('id').primaryKey(),
+  accountId: serial('account_id').primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   username: varchar('username', { length: 50 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   displayName: text('display_name'),
   avatarUrl: text('avatar_url'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('idx_account_email').on(table.email),
   uniqueIndex('idx_account_username').on(table.username),
@@ -431,10 +431,10 @@ export const account = pgTable('account', {
  * any event; saving is idempotent (unique constraint on user+event).
  */
 export const savedEvent = pgTable('saved_event', {
-  id: serial('id').primaryKey(),
-  accountId: integer('account_id').references(() => account.id, { onDelete: 'cascade' }).notNull(),
-  eventId: integer('event_id').references(() => event.id, { onDelete: 'cascade' }).notNull(),
-  savedAt: timestamp('saved_at').defaultNow().notNull(),
+  savedEventId: serial('saved_event_id').primaryKey(),
+  accountId: integer('account_id').references(() => account.accountId, { onDelete: 'cascade' }).notNull(),
+  eventId: integer('event_id').references(() => event.eventId, { onDelete: 'cascade' }).notNull(),
+  savedAt: timestamp('saved_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('idx_saved_event_unique').on(table.accountId, table.eventId),
   index('idx_saved_event_account').on(table.accountId),
@@ -448,10 +448,10 @@ export const savedEvent = pgTable('saved_event', {
  * is a JSONB array of enum values like ["nightlife", "music", "food"].
  */
 export const accountPreference = pgTable('account_preference', {
-  id: serial('id').primaryKey(),
-  accountId: integer('account_id').references(() => account.id, { onDelete: 'cascade' }).notNull().unique(),
-  preferredCategories: jsonb('preferred_categories').$type<string[]>().default([]),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  accountPreferenceId: serial('account_preference_id').primaryKey(),
+  accountId: integer('account_id').references(() => account.accountId, { onDelete: 'cascade' }).notNull().unique(),
+  preferredCategory: jsonb('preferred_category').$type<string[]>().default([]),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ============================================================================
@@ -472,15 +472,15 @@ export const accountPreference = pgTable('account_preference', {
  * upserts are idempotent via event_hash).
  */
 export const syncLog = pgTable('sync_log', {
-  id: serial('id').primaryKey(),
-  startedAt: timestamp('started_at').defaultNow().notNull(),
-  completedAt: timestamp('completed_at'),
+  syncLogId: serial('sync_log_id').primaryKey(),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
   status: syncStatusEnum('status').default('running').notNull(),
-  accountsSynced: integer('accounts_synced').default(0),
-  postsSynced: integer('posts_synced').default(0),
-  eventsSynced: integer('events_synced').default(0),
-  venuesSynced: integer('venues_synced').default(0),
-  subEventsSynced: integer('sub_events_synced').default(0),
+  accountSyncedCount: integer('account_synced_count').default(0),
+  postSyncedCount: integer('post_synced_count').default(0),
+  eventSyncedCount: integer('event_synced_count').default(0),
+  venueSyncedCount: integer('venue_synced_count').default(0),
+  subEventSyncedCount: integer('sub_event_synced_count').default(0),
   errorMessage: text('error_message'),
 });
 
@@ -505,7 +505,7 @@ export const sourceAccountRelation = relations(sourceAccount, ({ many }) => ({
 export const sourcePostRelation = relations(sourcePost, ({ one, many }) => ({
   sourceAccount: one(sourceAccount, {
     fields: [sourcePost.accountId],
-    references: [sourceAccount.id],
+    references: [sourceAccount.sourceAccountId],
   }),
   event: many(event),
 }));
@@ -513,15 +513,15 @@ export const sourcePostRelation = relations(sourcePost, ({ one, many }) => ({
 export const eventRelation = relations(event, ({ one, many }) => ({
   venue: one(venue, {
     fields: [event.venueId],
-    references: [venue.id],
+    references: [venue.venueId],
   }),
   sourcePost: one(sourcePost, {
     fields: [event.sourcePostId],
-    references: [sourcePost.id],
+    references: [sourcePost.sourcePostId],
   }),
   sourceAccount: one(sourceAccount, {
     fields: [event.sourceAccountId],
-    references: [sourceAccount.id],
+    references: [sourceAccount.sourceAccountId],
   }),
   subEvent: many(subEvent),
   savedBy: many(savedEvent),
@@ -530,14 +530,14 @@ export const eventRelation = relations(event, ({ one, many }) => ({
 export const subEventRelation = relations(subEvent, ({ one }) => ({
   event: one(event, {
     fields: [subEvent.eventId],
-    references: [event.id],
+    references: [event.eventId],
   }),
 }));
 
 export const accountRelation = relations(account, ({ many, one }) => ({
   savedEvent: many(savedEvent),
   preference: one(accountPreference, {
-    fields: [account.id],
+    fields: [account.accountId],
     references: [accountPreference.accountId],
   }),
 }));
@@ -545,10 +545,10 @@ export const accountRelation = relations(account, ({ many, one }) => ({
 export const savedEventRelation = relations(savedEvent, ({ one }) => ({
   account: one(account, {
     fields: [savedEvent.accountId],
-    references: [account.id],
+    references: [account.accountId],
   }),
   event: one(event, {
     fields: [savedEvent.eventId],
-    references: [event.id],
+    references: [event.eventId],
   }),
 }));
