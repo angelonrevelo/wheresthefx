@@ -311,6 +311,70 @@ cannot bounce the proxy into the internal network.
 
 ---
 
+## Export (the tripi feed)
+
+wheresthefx is one of [tripitropi.com](https://tripitropi.com)'s catalog sources. These two
+endpoints reshape the same venue and event data the rest of this API serves into tripi's draft
+contract, so its bulk ingest can consume it the same way it consumes OSM, Foursquare, and
+Overture. Read-only, unauthenticated, snake_case already.
+
+Full contract, every skip reason, and the tripi-side changes required: [TRIPI.md](TRIPI.md).
+
+### GET /export/place-draft
+
+The whole venue directory as tripi place drafts. Unpaginated on purpose: the catalog is in the low
+thousands, tripi's ingest wants one convergent pass rather than a cursor to resume, and a partial
+catalog would let its `(name, area)` dedupe mint rows it later has to merge.
+
+```json
+{
+  "source": "wheresthefx",
+  "version": 1,
+  "exported_at": "2026-07-26T02:00:00.000Z",
+  "draft": [
+    {
+      "source": "wheresthefx",
+      "name": "19 East",
+      "area_name": "Parañaque",
+      "address_line": "19th Ave, Sucat",
+      "category_tag": ["live music", "music venue", "gig"],
+      "latitude": 14.5233,
+      "longitude": 121.0478,
+      "external_ref": "venue/19",
+      "confidence": null,
+      "skip_reason": null
+    }
+  ],
+  "draft_count": 1,
+  "skipped": [{ "external_ref": "venue/20", "skip_reason": "no name" }]
+}
+```
+
+`confidence` is null for venues deliberately: there is no prominence signal for one on this side,
+and a made-up `1.0` would outrank Overture's real scores in any ranking tripi applies.
+
+### GET /export/event-draft
+
+Upcoming confirmed events as tripi event drafts — every place field above, plus `title`,
+`event_date`, `event_end_date`, `start_time`, `end_time`, `price_band`, `is_free`, `category`, and
+`source_url`.
+
+| Param   | Type                | Description                                    |
+| ------- | ------------------- | ---------------------------------------------- |
+| `since` | string (YYYY-MM-DD) | Floor on `event_date`. Clamped to today Manila. |
+
+A malformed `since` is a `400`, not a silently wider window.
+
+Filtered to `event_date >= today in Manila`, `event_status = 'confirmed'`, and
+`review_tier <> 'rejected'` — a cancelled event or an extractor false positive is worse in an
+itinerary than a missing one.
+
+**Skips are reported, not dropped.** A record that cannot become a place is still emitted in
+`skipped` with its reason (`no date`, `no title`, `no venue name`, `no coordinate`, `no name`), so
+"why is this spot missing" has an answer. This mirrors tripi's own `place_ingest.skip_reason`.
+
+---
+
 ## Health
 
 ### GET /health

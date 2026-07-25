@@ -9,3 +9,4 @@
 
 export * from './schema.js';
 export { db, sql } from './connection.js';
+export { ENV_FILE } from './env.js';

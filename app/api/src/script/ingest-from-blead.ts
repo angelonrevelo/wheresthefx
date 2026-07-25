@@ -58,7 +58,7 @@
  *   endpoint in the API handles fallback to local cache.
  */
 
-import 'dotenv/config';
+import '@wheresthefx/db/env';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';

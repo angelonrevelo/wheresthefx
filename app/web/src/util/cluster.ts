@@ -4,23 +4,18 @@
  * Deliberately free of any Leaflet import: this is pure geometry, and
  * keeping it that way means it can be unit-tested without a DOM. The
  * Leaflet-dependent icon builder lives in `markerIcon.ts`.
+ *
+ * The geometry itself now comes from `@wheresthefx/core`, which is the tree the API and tripi
+ * also read. It used to live in `markerUtils.ts`, which imported Leaflet and a PNG, so nothing
+ * outside the browser could reach it and the API's dedup script grew a second copy of the same
+ * haversine. One formula, one radius, one place to fix it. See docs/TRIPI.md.
+ *
+ * What stays here is the adapter: the knowledge that a map event carries
+ * `location_lat`/`location_lng` (the intermediate shape `useEventMarkers` builds out of the
+ * API's `venue_lat`/`venue_lng`) rather than a `Coordinate`.
  */
 
-// Haversine formula to calculate distance between two lat/lng points in meters
-function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-}
+import { groupByProximity, toCoordinate } from "@wheresthefx/core";
 
 export interface LocationMarker {
   lat: number;
@@ -41,65 +36,25 @@ export interface GeoEvent {
 /**
  * Group events into map markers by proximity.
  *
- * Rewritten from the original, which had three problems:
+ * Membership is decided against each cluster's founding position rather than a moving centroid,
+ * so the output does not depend on the order the API happened to return rows in. That reasoning,
+ * and the three bugs the original had, are documented on `groupByProximity` in
+ * `package/core/src/geo.ts`.
  *
- * 1. It recomputed each cluster's centroid with a full `reduce` over
- *    every member on every insertion — O(k) inside an O(n²) loop.
- * 2. The centroid moved as members were added, so a cluster could drift
- *    away from its founding point and swallow events that were never
- *    within the radius of anything.
- * 3. Because of (2) the output depended on the order the API happened to
- *    return rows in — the same data could produce different markers.
- *
- * This version keeps each cluster anchored to the position of its first
- * member, so membership is decided against a fixed point, and maintains
- * a running mean for display only. Output is order-independent for any
- * input where clusters do not overlap.
+ * `toCoordinate` also tightens the coordinate guard on the way past: the check here was
+ * finiteness-only, so it accepted a transposed pair and a stray `0,0` default and plotted both.
  */
 export function groupEventsByProximity(
   eventList: GeoEvent[],
   radiusMeter: number = 50,
 ): LocationMarker[] {
-  const clusterList: LocationMarker[] = [];
-  // Anchors are the membership test; the centroid is display only.
-  const anchorList: { lat: number; lng: number; sumLat: number; sumLng: number }[] = [];
-
-  for (const event of eventList) {
-    const lat = typeof event.location_lat === "string"
-      ? parseFloat(event.location_lat)
-      : event.location_lat;
-    const lng = typeof event.location_lng === "string"
-      ? parseFloat(event.location_lng)
-      : event.location_lng;
-
-    if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-
-    let nearestIndex = -1;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < anchorList.length; i++) {
-      const distance = calculateDistance(anchorList[i].lat, anchorList[i].lng, lat, lng);
-      if (distance <= radiusMeter && distance < minDistance) {
-        minDistance = distance;
-        nearestIndex = i;
-      }
-    }
-
-    if (nearestIndex >= 0) {
-      const anchor = anchorList[nearestIndex];
-      const cluster = clusterList[nearestIndex];
-      cluster.event.push(event);
-      // Running mean — no re-reduce over the whole membership.
-      anchor.sumLat += lat;
-      anchor.sumLng += lng;
-      cluster.lat = anchor.sumLat / cluster.event.length;
-      cluster.lng = anchor.sumLng / cluster.event.length;
-      continue;
-    }
-
-    anchorList.push({ lat, lng, sumLat: lat, sumLng: lng });
-    clusterList.push({ lat, lng, event: [event] });
-  }
-
-  return clusterList;
+  return groupByProximity(
+    eventList,
+    (one) => toCoordinate(one.location_lat, one.location_lng),
+    radiusMeter,
+  ).map((one) => ({
+    lat: one.latitude,
+    lng: one.longitude,
+    event: one.member,
+  }));
 }

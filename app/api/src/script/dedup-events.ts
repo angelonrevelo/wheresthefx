@@ -20,7 +20,7 @@
  * Also exported as `runDedup(sql)` for use in the ingest pipeline.
  */
 
-import 'dotenv/config';
+import '@wheresthefx/db/env';
 import postgres from 'postgres';
 
 // ────────────────────────────────────────────────────────────────────────────

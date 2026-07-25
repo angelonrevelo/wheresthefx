@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Shared contracts: event taxonomy, Manila-time helpers, request/response schemas",
+  "description": "Shared contracts: event taxonomy, Manila-time helpers, coordinate maths, tripi export contract",
   "exports": {
     ".": "./src/index.ts",
     "./category": "./src/category.ts",
-    "./time": "./src/time.ts"
+    "./geo": "./src/geo.ts",
+    "./time": "./src/time.ts",
+    "./tripi": "./src/tripi.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -23,7 +23,8 @@
     "build": "npm run build --workspaces --if-present",
     "db:generate": "npm run db:generate --workspace @wheresthefx/db",
     "db:migrate": "npm run db:migrate --workspace @wheresthefx/db",
-    "db:studio": "npm run db:studio --workspace @wheresthefx/db"
+    "db:studio": "npm run db:studio --workspace @wheresthefx/db",
+    "export:tripi": "npm run export:tripi --workspace @wheresthefx/api --"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

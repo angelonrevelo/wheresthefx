@@ -16,7 +16,9 @@
  * `postgresql://postgres:postgres@localhost:5432/wheresthefx`
  */
 
-import 'dotenv/config';
+// Must be the first import: it populates process.env, and the check below reads it at module
+// scope. `dotenv/config` used to sit here and could not find the root .env from a workspace cwd.
+import './env.js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.js';

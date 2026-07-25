@@ -10,6 +10,7 @@
  * | /api/categories    | categories.ts  | Category metadata          |
  * | /api/auth          | auth.ts        | Registration, login, /me   |
  * | /api/users         | users.ts       | Saved events, preferences  |
+ * | /api/export        | export.ts      | tripi draft feed           |
  * | /api/images/proxy  | (inline)       | Image proxy / cache        |
  * | /api/health        | (inline)       | Liveness + dependency check|
  *
@@ -24,7 +25,10 @@
  * `lib/imageGuard.ts` for why that matters.
  */
 
-import 'dotenv/config';
+// First import, and it must stay first: it populates process.env, and modules imported below
+// read JWT_SECRET and DATABASE_URL at module scope. `dotenv/config` was here and could not find
+// the root .env when npm ran this with cwd set to app/api. See package/db/src/env.ts.
+import '@wheresthefx/db/env';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -39,6 +43,7 @@ import venuesRouter from './route/venues.js';
 import categoriesRouter from './route/categories.js';
 import authRouter from './route/auth.js';
 import usersRouter from './route/users.js';
+import exportRouter from './route/export.js';
 import { snakeCaseResponse } from './middleware/snakeCase.js';
 import {
   MAX_IMAGE_BYTE,
@@ -143,6 +148,9 @@ app.use('/api/events', eventsRouter);
 app.use('/api/venues', venuesRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/users', usersRouter);
+// The tripi feed. Read-only and unauthenticated, like every other read here: it exposes the
+// same venue and event data /api/events already serves, reshaped into tripi's draft contract.
+app.use('/api/export', exportRouter);
 
 // ============================================================================
 // IMAGE PROXY

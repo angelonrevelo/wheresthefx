@@ -103,10 +103,11 @@ wheresthefx/
 ├── app/
 │   ├── api/                     # Express REST API  (@wheresthefx/api)
 │   │   └── src/
+│   │       ├── db/              # Every SQL statement lives here
 │   │       ├── lib/param.ts     # Validated query/route param parsing
 │   │       ├── middleware/      # auth (JWT), snakeCase response
-│   │       ├── routes/          # events, venues, categories, auth, users
-│   │       ├── scripts/         # ingest, dedup, geocode
+│   │       ├── routes/          # events, venues, categories, auth, users, export
+│   │       ├── scripts/         # ingest, dedup, geocode, export-tripi
 │   │       └── index.ts         # App entry, CORS, image proxy, health
 │   └── web/                     # Vite + React client  (@wheresthefx/web)
 │       └── src/
@@ -120,7 +121,9 @@ wheresthefx/
 │   ├── core/                    # Shared contracts  (@wheresthefx/core)
 │   │   └── src/
 │   │       ├── category.ts      # THE canonical 12-category taxonomy
-│   │       └── time.ts          # Manila-time helpers
+│   │       ├── geo.ts           # Haversine, coordinates, proximity clustering
+│   │       ├── time.ts          # Manila-time helpers
+│   │       └── tripi.ts         # The tripi export contract + mappers
 │   ├── db/                      # Schema + migration  (@wheresthefx/db)
 │   │   ├── migration/           # Drizzle migrations (versioned)
 │   │   └── src/schema.ts        # 9 tables — single source of truth
@@ -141,6 +144,13 @@ so it looked like it was working while writing NULLs.
 taxonomy lived in three places with three different value sets, and the
 sync between them collapsed five of the twelve categories to `other` on
 every run.
+
+Everything in `package/core` is pure — no database, no Express, no React, no
+DOM — with no runtime dependency beyond `zod`. That is a hard constraint, not
+a style: it is what lets tripi read this tree without inheriting this repo's
+stack, and it is why the haversine moved out of `markerUtils.ts` (which also
+imports Leaflet and a PNG, so nothing outside the browser could reach it and
+the API grew a second copy of the same formula). See [TRIPI.md](TRIPI.md).
 
 ## Data Pipeline
 
@@ -238,6 +248,18 @@ Query params: `category`, `search`, `is_free`, `date_from`, `date_to`, `page`, `
 | Method | Path                                  | Description            |
 | ------ | ------------------------------------- | ---------------------- |
 | `GET`  | `/images/proxy?url=...&shortcode=...` | Proxy Instagram images |
+
+### Export (the tripi feed)
+
+| Method | Path                              | Description                    | Auth |
+| ------ | --------------------------------- | ------------------------------ | ---- |
+| `GET`  | `/export/place-draft`             | Venue catalog as tripi drafts  | No   |
+| `GET`  | `/export/event-draft?since=...`   | Upcoming events as tripi drafts| No   |
+
+wheresthefx is one of [tripitropi.com](https://tripitropi.com)'s catalog sources: open datasets
+tell tripi that a bar exists, this tells it there is a night market in Poblacion on Friday, which
+is the half that matters once tripi has solved for the days a crew is free. Contract, skip
+reasons, and what tripi has to change to consume it: [TRIPI.md](TRIPI.md).
 
 ## Database Schema
 

@@ -11,7 +11,7 @@
  *   cd server && npx tsx src/scripts/geocode-venues.ts
  */
 
-import 'dotenv/config';
+import '@wheresthefx/db/env';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq, isNull, sql } from 'drizzle-orm';
