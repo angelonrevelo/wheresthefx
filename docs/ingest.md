@@ -47,25 +47,24 @@ Two events with the same title, date, and venue are considered duplicates. When 
 ### Manual (local development)
 
 ```bash
-cd server
-BLEAD_DB_PATH=../blead/data/ig-events.db \
+BLEAD_DB_PATH=./data/ig-events.db \
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wheresthefx \
-npx tsx src/scripts/ingest-from-blead.ts
+npm run ingest --workspace @wheresthefx/api
 ```
 
 ### Cron (production VPS)
 
 ```bash
-# Every 6 hours
-0 */6 * * * cd /path/to/wheresthefx/server && \
-  npx tsx src/scripts/ingest-from-blead.ts >> /var/log/wheresthefx-ingest.log 2>&1
+# Every 6 hours. Hours are listed explicitly rather than as a step
+# expression so this line can be quoted inside block comments.
+0 0,6,12,18 * * * cd /path/to/wheresthefx && \
+  npm run ingest --workspace @wheresthefx/api >> /var/log/wheresthefx-ingest.log 2>&1
 ```
 
 ### Via npm script
 
 ```bash
-cd server
-npm run ingest
+npm run ingest --workspace @wheresthefx/api
 ```
 
 ### From blead (local → VPS → production, one command)
@@ -110,10 +109,30 @@ Typical sync times:
 
 ## Error Handling
 
-- Each table syncs independently — if posts fail, venues and accounts are preserved
-- Failed syncs are logged with the error message
+- Failed syncs are logged to `sync_log` with the error message
 - The script exits with code 1 on failure (for cron monitoring)
-- SQLite is opened in read-only mode (cannot corrupt blead's data)
+- SQLite is opened in read-only mode (cannot corrupt the source data)
+
+### Known limitations of this script
+
+This is the legacy blead→Postgres bridge. It is being replaced by the
+in-house pipeline in `package/ingest`; until then, be aware:
+
+- **There are no transactions.** The docstring claims transactional
+  batches; there are none anywhere in the repo. A mid-run failure leaves
+  the database half-ingested.
+- **Only posts and events have per-row error guards.** Venues, accounts,
+  and sub-events abort the whole run on a single bad row — the opposite
+  of what this document used to claim.
+- **Upserts are blind.** `ON CONFLICT DO UPDATE` sets all values
+  unconditionally, so a lower-confidence re-scrape overwrites a better
+  record despite the documented "higher completeness_score wins" rule.
+- **A destructive dedup pass runs at the end.** `runDedup` hard-`DELETE`s
+  fuzzy-matched duplicates, cascading through `saved_event` — a user's
+  bookmark disappears when their event loses a match. There is no audit
+  trail of what was removed.
+- **Geocoding is not wired in.** Newly ingested venues stay unmapped
+  until `geocode-venues.ts` is run by hand.
 
 ## Image Handling
 
