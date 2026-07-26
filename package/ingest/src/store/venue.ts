@@ -100,13 +100,59 @@ export async function loadVenueIndex(): Promise<VenueIndex> {
 }
 
 /**
- * Insert or update a venue, keyed on name.
+ * Insert or update a venue, resolving by normalised name first.
+ *
+ * The unique constraint is on the raw `name`, so "Homebase", "HOMEBASE",
+ * "the_funroof" and "The Funroof" each inserted a separate row — the
+ * directory accumulated a dozen duplicates that way. Matching on the
+ * normalised form first means a new spelling is recorded as an *alias*
+ * of the venue that already exists rather than becoming a second one.
  *
  * Coordinates are only overwritten when the incoming row actually has
  * them: a later scrape that happens not to include lat/lng must not wipe
  * a geocode that already succeeded.
  */
 export async function upsertVenue(draft: VenueDraft): Promise<number> {
+  const normalizedName = normalizeVenueName(draft.name);
+
+  // Scan for an existing row whose name or alias normalises the same way.
+  const existingList = await db
+    .select({ venueId: venue.venueId, name: venue.name, alias: venue.alias })
+    .from(venue);
+
+  const existing = existingList.find(row =>
+    normalizeVenueName(row.name) === normalizedName
+    || (row.alias ?? []).some(alias => normalizeVenueName(alias) === normalizedName),
+  );
+
+  if (existing) {
+    // Record the new spelling as an alias, so the variant is known
+    // without becoming a row.
+    const aliasList = [...(existing.alias ?? [])];
+    const isNewSpelling = normalizeVenueName(existing.name) !== normalizedName
+      && !aliasList.some(alias => normalizeVenueName(alias) === normalizedName);
+    if (isNewSpelling) aliasList.push(draft.name);
+
+    for (const alias of draft.alias ?? []) {
+      const key = normalizeVenueName(alias);
+      if (key === normalizeVenueName(existing.name)) continue;
+      if (aliasList.some(known => normalizeVenueName(known) === key)) continue;
+      aliasList.push(alias);
+    }
+
+    await db.update(venue).set({
+      alias: aliasList,
+      ...(draft.address ? { address: draft.address } : {}),
+      ...(draft.city ? { city: draft.city } : {}),
+      ...(draft.lat !== null && draft.lat !== undefined ? { lat: draft.lat } : {}),
+      ...(draft.lng !== null && draft.lng !== undefined ? { lng: draft.lng } : {}),
+      ...(draft.instagramHandle ? { instagramHandle: draft.instagramHandle } : {}),
+      updatedAt: new Date(),
+    }).where(eq(venue.venueId, existing.venueId));
+
+    return existing.venueId;
+  }
+
   const [row] = await db.insert(venue)
     .values({
       name: draft.name,

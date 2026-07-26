@@ -65,3 +65,34 @@ describe('VenueIndex', () => {
     expect(shadowed.match('The Bar')?.venueId).toBe(1);
   });
 });
+
+describe('normalised-name collisions', () => {
+  /**
+   * These are the real spellings that produced separate venue rows in
+   * production. Each pair must normalise identically, so `upsertVenue`
+   * folds the second into the first as an alias instead of inserting it.
+   */
+  const observedCollision: [string, string][] = [
+    ['Homebase', 'HOMEBASE'],
+    ['SinePop', 'Sinepop'],
+    ['the_funroof', 'The Funroof'],
+    ['University Pad', 'University pad'],
+    ["Jess & Pat's", 'Jess and Pat’s'],
+    ['a.bode space', 'A.bode Space'],
+    ['Ayala Malls Circuit, Activity Center', 'Ayala Malls Circuit Activity Center'],
+  ];
+
+  for (const [a, b] of observedCollision) {
+    it(`folds "${a}" and "${b}" together`, () => {
+      expect(normalizeVenueName(a)).toBe(normalizeVenueName(b));
+    });
+  }
+
+  it('still separates venues that merely look similar', () => {
+    // Folding these would put two real places on one pin, which is the
+    // more damaging error.
+    expect(normalizeVenueName('19 East')).not.toBe(normalizeVenueName('19 East Annex'));
+    expect(normalizeVenueName('Ayala Malls Circuit')).not.toBe(normalizeVenueName('Ayala Malls Manila Bay'));
+    expect(normalizeVenueName('SM Mall of Asia Arena')).not.toBe(normalizeVenueName('SM Mall of Asia'));
+  });
+});
