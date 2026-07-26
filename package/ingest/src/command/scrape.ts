@@ -3,6 +3,10 @@ import { sql as pgConnection } from '@wheresthefx/db';
 import { createStealthSession, jitteredDelay } from '../scraper/stealth.js';
 import { InstagramBlockedError, fetchRecentPost, resolveUserId } from '../scraper/instagram.js';
 import { extractEvent, ExtractorAuthError } from '../extractor/extract.js';
+import { readBackendConfig } from '../extractor/backend.js';
+import { prefilterCaption } from '../extractor/prefilter.js';
+import { PROMPT_VERSION } from '../prompt/extraction.js';
+import { CostMeter, loadExtractedMarker, needsExtraction } from '../store/cost.js';
 import { assignReviewTier } from '../identity/hash.js';
 import { saveEvent } from '../store/event.js';
 import { listScrapeTarget, markAccountScraped } from '../store/account.js';
@@ -87,6 +91,10 @@ async function main(): Promise<void> {
   const venueIndex = await loadVenueIndex();
   const knownVenueNameList = venueIndex.size > 0 ? await loadVenueNameList() : [];
 
+  const backendConfig = readBackendConfig();
+  const meter = new CostMeter(backendConfig.model);
+  console.log(`Model: ${backendConfig.model} @ ${backendConfig.baseUrl}`);
+
   const syncLogId = option.isDryRun ? -1 : await startSyncRun();
 
   const session = await createStealthSession({
@@ -154,7 +162,26 @@ async function main(): Promise<void> {
       }
       consecutiveEmpty = 0;
 
+      // One query for the batch: which of these have we already read?
+      const markerByShortcode = await loadExtractedMarker(postList.map(p => p.shortcode));
+
       for (const post of postList) {
+        // Free checks first. Extraction is the only thing here that costs
+        // money, so nothing reaches it that a regex could have rejected.
+        const alreadyDone = needsExtraction(
+          markerByShortcode.get(post.shortcode), post.caption, PROMPT_VERSION,
+        );
+        if (!alreadyDone.needed) {
+          meter.recordSkip();
+          continue;
+        }
+
+        const prefilter = prefilterCaption(post.caption, post.hashtagList);
+        if (!prefilter.isWorthExtracting) {
+          meter.recordSkip();
+          continue;
+        }
+
         try {
           const outcome = await extractEvent({
             caption: post.caption,
@@ -167,8 +194,9 @@ async function main(): Promise<void> {
               typicalHours: account.typicalHours,
               recurringEventList: account.recurringEvent,
             },
-          });
+          }, { config: backendConfig });
 
+          meter.record(outcome.usage);
           if (outcome.unknownCategory) count.unknownCategory++;
 
           if (!option.isDryRun) {

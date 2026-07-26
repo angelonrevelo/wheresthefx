@@ -112,11 +112,18 @@ export interface CompletionOption {
  * tolerates malformed output, because not every compatible endpoint
  * honours the flag.
  */
+export interface CompletionResult {
+  content: string;
+  /** Reported by the provider. Zero when the endpoint omits it. */
+  inputToken: number;
+  outputToken: number;
+}
+
 export async function complete(
   config: BackendConfig,
   prompt: string,
   option: CompletionOption = {},
-): Promise<string> {
+): Promise<CompletionResult> {
   const partList: ContentPart[] = [{ type: 'text', text: prompt }];
 
   for (const dataUri of option.imageDataUriList ?? []) {
@@ -153,6 +160,13 @@ export async function complete(
 
   const payload = await response.json() as {
     choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  return String(payload?.choices?.[0]?.message?.content ?? '').trim();
+
+  return {
+    content: String(payload?.choices?.[0]?.message?.content ?? '').trim(),
+    // Measured, not estimated. Spend was previously invisible.
+    inputToken: payload?.usage?.prompt_tokens ?? 0,
+    outputToken: payload?.usage?.completion_tokens ?? 0,
+  };
 }

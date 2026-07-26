@@ -36,6 +36,8 @@ const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 export interface ExtractResult extends ExtractionOutcome {
   /** A category the model invented that the taxonomy does not cover. */
   unknownCategory: string | null;
+  /** Token usage for this call, for cost accounting. */
+  usage: { inputToken: number; outputToken: number };
 }
 
 export async function extractEvent(
@@ -54,12 +56,13 @@ export async function extractEvent(
 
   for (let attempt = 0; attempt <= maxRetry; attempt++) {
     try {
-      const raw = await complete(config, prompt, { imageDataUriList });
-      const { result, unknownCategory } = parseExtractionResponse(raw, postedAt);
+      const completion = await complete(config, prompt, { imageDataUriList });
+      const { result, unknownCategory } = parseExtractionResponse(completion.content, postedAt);
 
       return {
         result,
         unknownCategory,
+        usage: { inputToken: completion.inputToken, outputToken: completion.outputToken },
         provenance: {
           method: imageDataUriList.length > 0 ? 'ai+image' : 'ai',
           model: config.model,
@@ -90,6 +93,7 @@ export async function extractEvent(
       return {
         result: emptyExtraction(),
         unknownCategory: null,
+        usage: { inputToken: 0, outputToken: 0 },
         provenance: {
           method: 'none',
           model: config.model,
@@ -103,6 +107,7 @@ export async function extractEvent(
   return {
     result: emptyExtraction(),
     unknownCategory: null,
+    usage: { inputToken: 0, outputToken: 0 },
     provenance: {
       method: 'none',
       model: config.model,
