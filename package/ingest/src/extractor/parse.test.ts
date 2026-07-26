@@ -218,10 +218,23 @@ describe('looksLikeHandle — a venue is not an @mention', () => {
     expect(looksLikeHandle('electricstudioph')).toBe(true);
   });
 
+  it('rejects anything the author prefixed with @', () => {
+    // "@hungry_neighborsph" reached production and geocoded to a guess,
+    // which puts a wrong pin on the map — worse than no pin at all.
+    expect(looksLikeHandle('@hungry_neighborsph')).toBe(true);
+    expect(looksLikeHandle('@nokal')).toBe(true);
+  });
+
   it('accepts real venue names', () => {
     for (const name of ["Mow's Bar", '19 East', 'SM Mall of Asia Arena', 'Apotheka Manila', 'Nokal']) {
       expect(looksLikeHandle(name), name).toBe(false);
     }
+  });
+
+  it('accepts a real venue whose name merely looks unusual', () => {
+    // 78-45-33 is a bar in Salcedo Village. Hyphens are not handle
+    // characters, and it geocodes correctly.
+    expect(looksLikeHandle('78-45-33', '78salcedo')).toBe(false);
   });
 
   it('never rejects a multi-word name', () => {

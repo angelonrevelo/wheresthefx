@@ -45,6 +45,12 @@ const HANDLE_SHAPED = /^[a-z0-9._]{3,30}$/;
 export function looksLikeHandle(venueName: string, username?: string | null): boolean {
   const trimmed = venueName.trim();
   if (trimmed.includes(' ')) return false;
+
+  // A leading @ is the author saying so outright. "@hungry_neighborsph"
+  // reached production and geocoded to a guess, which is worse than no
+  // pin at all.
+  if (trimmed.startsWith('@')) return true;
+
   if (!HANDLE_SHAPED.test(trimmed)) return false;
   // The posting account's own handle is the common case, but any
   // unspaced all-lowercase token is more likely a handle than a venue.
