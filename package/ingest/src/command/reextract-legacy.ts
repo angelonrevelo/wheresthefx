@@ -10,6 +10,7 @@ import { CostMeter } from '../store/cost.js';
 import { saveEvent } from '../store/event.js';
 import { savePost } from '../store/post.js';
 import { loadVenueIndex, loadVenueNameList } from '../store/venue.js';
+import { db, sourceAccount } from '@wheresthefx/db';
 
 /**
  * Re-extract the recovered snapshot with the current prompt.
@@ -104,6 +105,17 @@ async function main(): Promise<void> {
     ${limit ? `LIMIT ${limit}` : ''}
   `).all() as SqlitePost[];
 
+  // Posts must be linked to the account that made them. The first
+  // version passed null and orphaned all 5,183, which made every
+  // account-level count wrong: 199 active accounts read as "only 106
+  // reached" when the live scraper had in fact reached 161.
+  const accountRow = await db
+    .select({ id: sourceAccount.sourceAccountId, username: sourceAccount.username })
+    .from(sourceAccount);
+  const accountIdByUsername = new Map(
+    accountRow.map(row => [row.username.toLowerCase(), row.id]),
+  );
+
   const config = readBackendConfig();
   const meter = new CostMeter(config.model);
   const venueIndex = await loadVenueIndex();
@@ -178,7 +190,9 @@ async function main(): Promise<void> {
       const imageUrl = imageUrlList[0] ?? null;
 
       const sourcePostId = await savePost({
-        accountId: null,
+        accountId: post.username
+          ? accountIdByUsername.get(post.username.toLowerCase()) ?? null
+          : null,
         shortcode: post.shortcode,
         postUrl: post.post_url ?? `https://www.instagram.com/p/${post.shortcode}/`,
         postType: post.post_type ?? 'unknown',
@@ -235,7 +249,9 @@ async function main(): Promise<void> {
         imageUrl,
         sourceUsername: post.username,
         sourcePostId,
-        sourceAccountId: null,
+        sourceAccountId: post.username
+          ? accountIdByUsername.get(post.username.toLowerCase()) ?? null
+          : null,
         subEventList: result.subEventList?.map(entry => ({
           title: entry.title,
           eventDate: entry.date,
