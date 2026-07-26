@@ -63,6 +63,15 @@ interface SqlitePost {
   typical_hours: string | null;
 }
 
+/**
+ * Posts extracted concurrently per batch.
+ *
+ * Serially the full set takes 5.6 hours at 3.65s a post, which overruns
+ * the six-hour scrape interval and would have the two writing at once.
+ * Eight brings it near an hour and stays well inside any sane rate limit.
+ */
+const BATCH_SIZE = 8;
+
 function readArg(name: string): string | null {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] ?? null : null;
@@ -113,29 +122,47 @@ async function main(): Promise<void> {
     + `model ${config.model}, prompt ${PROMPT_VERSION}${isDryRun ? ' (dry run)' : ''}\n`,
   );
 
-  for (const post of postList) {
-    if (!post.caption) continue;
+  // The prefilter is anti-signal only: it drops what is demonstrably not
+  // an event rather than guessing at what is.
+  const workList = postList.filter((post) => {
+    if (!post.caption) return false;
+    if (prefilterCaption(post.caption).isWorthExtracting) return true;
+    count.prefiltered++;
+    return false;
+  });
 
-    // The prefilter is anti-signal only: it drops what is demonstrably
-    // not an event rather than guessing at what is.
-    if (!prefilterCaption(post.caption).isWorthExtracting) {
-      count.prefiltered++;
-      continue;
-    }
+  // Extraction is network-bound and independent per post, so it runs a
+  // batch at a time. Writes stay serial: two concurrent `saveEvent` calls
+  // for the same content can both pass the existence check and then race
+  // on the `event_hash` unique constraint. Serially it is the same code
+  // path the scraper already uses.
+  for (let offset = 0; offset < workList.length; offset += BATCH_SIZE) {
+    const batch = workList.slice(offset, offset + BATCH_SIZE);
 
-    try {
-      const outcome = await extractEvent({
-        caption: post.caption,
-        username: post.username,
-        postedAt: post.posted_at ? new Date(post.posted_at) : null,
-        knownVenueList: knownVenueNameList,
-        venueProfile: {
-          venueType: post.venue_type,
-          categoryDistribution: parseJson(post.category_distribution),
-          typicalHours: parseJson(post.typical_hours),
-          recurringEventList: null,
-        },
-      }, { config });
+    const outcomeList = await Promise.all(batch.map(async (post) => {
+      try {
+        return await extractEvent({
+          caption: post.caption as string,
+          username: post.username,
+          postedAt: post.posted_at ? new Date(post.posted_at) : null,
+          knownVenueList: knownVenueNameList,
+          venueProfile: {
+            venueType: post.venue_type,
+            categoryDistribution: parseJson(post.category_distribution),
+            typicalHours: parseJson(post.typical_hours),
+            recurringEventList: null,
+          },
+        }, { config });
+      } catch (error) {
+        count.failed++;
+        console.log(`  ! ${post.shortcode}: ${(error as Error).message.slice(0, 90)}`);
+        return null;
+      }
+    }));
+
+    for (const [index, outcome] of outcomeList.entries()) {
+      if (!outcome) continue;
+      const post = batch[index];
 
       meter.record(outcome.usage);
       count.extracted++;
@@ -218,17 +245,12 @@ async function main(): Promise<void> {
         })) ?? null,
       });
       count.event++;
-    } catch (error) {
-      count.failed++;
-      console.log(`  ! ${post.shortcode}: ${(error as Error).message.slice(0, 100)}`);
     }
 
-    if (count.extracted % 25 === 0 && count.extracted > 0) {
-      console.log(
-        `  ${count.extracted}/${postList.length - count.prefiltered} extracted, `
-        + `${count.event} event(s), $${meter.totalCost.toFixed(4)}`,
-      );
-    }
+    console.log(
+      `  ${Math.min(offset + BATCH_SIZE, workList.length)}/${workList.length} `
+      + `extracted, ${count.event} event(s), $${meter.totalCost.toFixed(4)}`,
+    );
   }
 
   sqlite.close();
