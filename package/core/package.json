@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./category": "./src/category.ts",
-    "./time": "./src/time.ts"
+    "./time": "./src/time.ts",
+    "./repo": "./src/repo.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

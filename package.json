@@ -15,7 +15,7 @@
     "lint:copy": "tsx script/validate-copy.ts",
     "//lint:lock": "The exact check the server runs. `npm ci --omit=dev` refuses to install when package.json and package-lock.json disagree, so a version typed by hand into one and not the other does not fail here, or in the tests, or in the build — it fails halfway through a deploy. Costs a second from cache.",
     "lint:lock": "npm ci --dry-run",
-    "check": "npm run lint:naming && npm run lint:copy && npm run lint && npm run typecheck && npm run test",
+    "check": "npm run lint:naming && npm run lint:copy && npm run lint && npm run typecheck && npm run test && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:web": "npm run dev --workspace @wheresthefx/web",

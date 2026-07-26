@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findRepoRoot } from '@wheresthefx/core';
+import { findRepoRoot } from '@wheresthefx/core/repo';
 
 /**
  * In-process ingest scheduler.

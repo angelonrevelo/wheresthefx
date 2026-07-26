@@ -10,4 +10,8 @@
 
 export * from './category.js';
 export * from './time.js';
-export * from './repo.js';
+
+// `findRepoRoot` is deliberately NOT re-exported here. It reads the
+// filesystem, and this entry point is bundled into the browser: pulling
+// `node:fs` through it broke `vite build` outright. Node callers import
+// `@wheresthefx/core/repo` directly.
