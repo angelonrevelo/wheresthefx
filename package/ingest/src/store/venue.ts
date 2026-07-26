@@ -1,5 +1,5 @@
-import { db, venue } from '@wheresthefx/db';
-import { eq } from 'drizzle-orm';
+import { db, event, venue } from '@wheresthefx/db';
+import { desc, eq, sql } from 'drizzle-orm';
 
 /**
  * Venue persistence and matching.
@@ -202,6 +202,22 @@ export async function recordGeocode(
  * spellings, and the point of the list is that it does not.
  */
 export async function loadVenueNameList(): Promise<string[]> {
-  const rowList = await db.select({ name: venue.name }).from(venue);
+  // Ordered by how many events each venue actually holds, because the
+  // prompt shows only the first N and the rest are invisible to the
+  // model. Unordered, that cut fell wherever Postgres happened to return
+  // rows: "The Corner House" with 17 events sat at position 322 and was
+  // never shown, while single-event venues took slots ahead of it. Seven
+  // of the eight venues the model was measurably missing were past the
+  // cut, including ones with 24, 29 and 32 events.
+  const rowList = await db
+    .select({
+      name: venue.name,
+      eventCount: sql<number>`(
+        select count(*) from ${event} e where e.venue_name = ${venue.name}
+      )::int`,
+    })
+    .from(venue)
+    .orderBy(desc(sql`(select count(*) from ${event} e where e.venue_name = ${venue.name})`));
+
   return rowList.map(row => row.name);
 }

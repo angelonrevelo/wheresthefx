@@ -30,8 +30,14 @@ import { CATEGORY } from '@wheresthefx/core';
  * every extracted row (`source_post.prompt_version`), so a quality
  * regression can be traced to the prompt that caused it. The golden
  * fixture suite must be re-run before a bump lands.
+ *
+ * The context counts as the prompt. 4.2.0 changes no rule at all — it
+ * widens the known-venue list from 120 to 200 and has the caller order it
+ * by usage. That is still a version, because two runs with different
+ * lists are not comparable and the whole point of recording a version is
+ * being able to tell them apart afterwards.
  */
-export const PROMPT_VERSION = '4.1.0';
+export const PROMPT_VERSION = '4.2.0';
 
 /** Where a venue's location resolved to, when it isn't a plain address. */
 export type LocationStatus = 'confirmed' | 'tba' | 'secret' | 'dm_for_details';
@@ -68,8 +74,20 @@ const BAR_LIKE_VENUE_TYPE = ['bar', 'club', 'jazz_bar', 'restaurant_bar'] as con
 /** Above this share of historical nightlife, the override fires. */
 const NIGHTLIFE_DOMINANCE_THRESHOLD = 0.6;
 
-/** Cap on venue names spliced into the prompt, to bound token cost. */
-const MAX_VENUE_IN_PROMPT = 120;
+/**
+ * Cap on venue names spliced into the prompt, to bound token cost.
+ *
+ * Raised from 120 once the list was ordered by usage. At 120 the cut
+ * landed mid-directory and the caller passed rows in whatever order the
+ * database returned them, so busy venues were routinely invisible: seven
+ * of the eight venues the model was measurably failing to recognise sat
+ * past the cut, three of them with more than 20 events each.
+ *
+ * 200 covers every venue holding two or more events. The remainder are
+ * one-offs unlikely to recur, and each name costs roughly five tokens on
+ * every call.
+ */
+const MAX_VENUE_IN_PROMPT = 200;
 
 function toIsoDate(value: string | Date | null | undefined): string {
   const date = value ? new Date(value) : new Date();

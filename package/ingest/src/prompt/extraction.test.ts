@@ -167,12 +167,22 @@ describe('known-venue context', () => {
     expect(prompt).toContain('use the EXACT spelling');
   });
 
-  it('caps the list at 120 and says how many were withheld', () => {
-    const venueList = Array.from({ length: 200 }, (_, i) => `Venue ${i}`);
+  it('caps the list at 200 and says how many were withheld', () => {
+    const venueList = Array.from({ length: 300 }, (_, i) => `Venue ${i}`);
     const prompt = postFor({ ...BASE, knownVenueList: venueList });
-    expect(prompt).toContain('KNOWN VENUES (200');
-    expect(prompt).toContain('and 80 more');
-    expect(prompt).not.toContain('Venue 150');
+    expect(prompt).toContain('KNOWN VENUES (300');
+    expect(prompt).toContain('and 100 more');
+    expect(prompt).not.toContain('Venue 250');
+  });
+
+  it('keeps the head of the list, which the caller orders by usage', () => {
+    // The cap is only safe because `loadVenueNameList` sorts by event
+    // count. Unordered, the cut fell wherever Postgres returned rows and
+    // venues with 20+ events sat past it, unseen by the model.
+    const venueList = Array.from({ length: 300 }, (_, i) => `Venue ${i}`);
+    const prompt = postFor({ ...BASE, knownVenueList: venueList });
+    expect(prompt).toContain('Venue 0');
+    expect(prompt).toContain('Venue 199');
   });
 });
 
