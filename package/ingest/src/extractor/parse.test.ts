@@ -328,3 +328,17 @@ describe('looksLikeNonVenue — a room is not a place', () => {
     expect(result.venueName).toBeNull();
   });
 });
+
+describe('looksLikeNonVenue — an @mention inside a longer name', () => {
+  it('rejects a name with a handle appended', () => {
+    // This reached the venue directory as its own row, then survived a
+    // merge and displaced "The Corner House" — the venue it named.
+    expect(looksLikeNonVenue('Cupid\u2019s Corner @thecornerhouseph')).toBe(true);
+    expect(looksLikeNonVenue('fun roof @the_funroof poblacion')).toBe(true);
+  });
+
+  it('leaves an ordinary name alone', () => {
+    expect(looksLikeNonVenue('Cafe 10/23')).toBe(false);
+    expect(looksLikeNonVenue('Jess and Pat\u2019s')).toBe(false);
+  });
+});

@@ -115,6 +115,13 @@ export function looksLikeNonVenue(venueName: string): boolean {
   const trimmed = venueName.trim();
   if (trimmed === '') return true;
 
+  // An @mention anywhere in the name, not only as the whole of it.
+  // "Cupid's Corner @thecornerhouseph" has spaces, so the handle rule
+  // ignores it, and it reached the venue directory as a row of its own —
+  // then survived a merge and displaced "The Corner House", the venue it
+  // was pointing at all along.
+  if (/(^|\s)@[a-z0-9._]{2,}/i.test(trimmed)) return true;
+
   // A caption fragment reached venueName intact once: "Where: Manila
   // (Exact location to be sent to confirmed participants) When: January
   // 25, 2026 Time: 10:00 AM to 1:00 PM".
