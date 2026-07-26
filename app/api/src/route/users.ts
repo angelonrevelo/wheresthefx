@@ -37,6 +37,7 @@ import {
   listSavedEvent,
   upsertPreference,
 } from '../db/account.js';
+import { withId } from '../lib/dto.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -109,11 +110,11 @@ router.get('/me/saved', async (req: Request, res: Response) => {
 
     const saved = await listSavedEvent(accountId);
 
-    const data = saved.map(row => ({
+    const data = saved.map(row => withId({
       ...row.event,
       isSaved: true,
       savedAt: row.savedAt,
-    }));
+    }, 'eventId'));
 
     res.json({ data });
   } catch (err) {

@@ -12,6 +12,7 @@
 import { Router, Request, Response } from 'express';
 import { manilaToday } from '@wheresthefx/core';
 import { findVenueById, listEventAtVenue, listVenueWithEventCount } from '../db/venue.js';
+import { withId, withIdList } from '../lib/dto.js';
 import { parseBoundedInt, parseId } from '../lib/param.js';
 
 const router = Router();
@@ -51,7 +52,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(found);
+    res.json(withId(found, 'venueId'));
   } catch (err) {
     console.error('Venue detail error:', err);
     res.status(500).json({ error: 'Failed to fetch venue' });
@@ -75,8 +76,8 @@ router.get('/:id/events', async (req: Request, res: Response) => {
       fallback: VENUE_EVENT_LIMIT,
     });
 
-    const data = await listEventAtVenue(id, manilaToday(), limit);
-    res.json({ data });
+    const rowList = await listEventAtVenue(id, manilaToday(), limit);
+    res.json({ data: withIdList(rowList, 'eventId') });
   } catch (err) {
     console.error('Venue events error:', err);
     res.status(500).json({ error: 'Failed to fetch venue events' });

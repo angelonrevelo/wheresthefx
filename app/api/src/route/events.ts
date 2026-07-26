@@ -25,6 +25,7 @@ import {
   loadSavedIdFor,
   type EventStatus,
 } from '../db/event.js';
+import { withId } from '../lib/dto.js';
 import {
   escapeLikeTerm,
   firstParam,
@@ -108,7 +109,7 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
     const savedId = await loadSavedIdFor(req.user?.userId, rowList.map(row => row.eventId));
 
     res.json({
-      data: rowList.map(row => ({ ...row, isSaved: savedId.has(row.eventId) })),
+      data: rowList.map(row => withId({ ...row, isSaved: savedId.has(row.eventId) }, 'eventId')),
       pagination: {
         page,
         limit,
@@ -134,7 +135,7 @@ router.get('/upcoming', optionalAuth, async (req: Request, res: Response) => {
     const savedId = await loadSavedIdFor(req.user?.userId, rowList.map(row => row.eventId));
 
     res.json({
-      data: rowList.map(row => ({ ...row, isSaved: savedId.has(row.eventId) })),
+      data: rowList.map(row => withId({ ...row, isSaved: savedId.has(row.eventId) }, 'eventId')),
     });
   } catch (err) {
     console.error('Upcoming events error:', err);
@@ -192,7 +193,7 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
     }
 
     const savedId = await loadSavedIdFor(req.user?.userId, [found.eventId]);
-    res.json({ ...found, isSaved: savedId.has(found.eventId) });
+    res.json(withId({ ...found, isSaved: savedId.has(found.eventId) }, 'eventId'));
   } catch (err) {
     console.error('Event detail error:', err);
     res.status(500).json({ error: 'Failed to fetch event' });

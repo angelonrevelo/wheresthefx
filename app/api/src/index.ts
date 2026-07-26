@@ -48,6 +48,7 @@ import {
   safeContentType,
 } from './lib/imageGuard.js';
 import { firstParam } from './lib/param.js';
+import { readIngestFreshness } from './lib/freshness.js';
 import { startScheduler } from './scheduler.js';
 
 const app = express();
@@ -285,18 +286,21 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   let lastSyncAt: string | null = null;
   let isIngestStale = true;
   try {
-    const row = await sql<{ completed_at: Date | null }[]>`
+    // `completed_at` arrives as a string, not a Date. Calling
+    // .toISOString() on it threw, the catch below swallowed it, and the
+    // endpoint reported "never synced" — indistinguishable from a
+    // genuinely dead pipeline, which is precisely the signal this exists
+    // to give. Parsed defensively so either shape works.
+    const row = await sql<{ completed_at: Date | string | null }[]>`
       SELECT completed_at
       FROM sync_log
       WHERE status = 'completed'
       ORDER BY completed_at DESC NULLS LAST
       LIMIT 1
     `;
-    const completedAt = row[0]?.completed_at ?? null;
-    if (completedAt) {
-      lastSyncAt = completedAt.toISOString();
-      isIngestStale = Date.now() - completedAt.getTime() > 24 * 60 * 60 * 1000;
-    }
+    const freshness = readIngestFreshness(row[0]?.completed_at);
+    lastSyncAt = freshness.lastSyncAt;
+    isIngestStale = freshness.isStale;
   } catch (err) {
     console.error('Health check: sync_log unreadable', err);
   }
