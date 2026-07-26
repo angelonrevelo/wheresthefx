@@ -191,3 +191,19 @@ describe('assignReviewTier', () => {
     expect(assignReviewTier(0.5, complete)).toBe('full');
   });
 });
+
+describe('titleSimilarity — the trailing venue is not part of the title', () => {
+  it('scores two different venues as identical titles, by design', () => {
+    // "Souk Popup at Estancia" and "Souk Popup at Rizal Row" both
+    // normalise to "souk popup" and score 1.00, which reads like a bug
+    // and is not one. The venue is stripped here on purpose so "Jazz
+    // Night at Mow's" matches "Jazz Night"; keeping the two apart is
+    // `isSameEvent`'s job, and it requires the venues to agree.
+    expect(titleSimilarity('Souk Popup at Estancia', 'Souk Popup at Rizal Row')).toBe(1);
+    expect(titleSimilarity('Jazz Night at Mow\u2019s Bar', 'Jazz Night')).toBe(1);
+  });
+
+  it('strips a presenter prefix for the same reason', () => {
+    expect(titleSimilarity('Karpos Live presents Hiatus Kaiyote', 'Hiatus Kaiyote')).toBe(1);
+  });
+});
