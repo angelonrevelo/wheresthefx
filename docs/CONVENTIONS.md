@@ -128,8 +128,11 @@ Listed rather than hidden. None of these are enforced, so the gate will not stop
 - **No `deleted_at` anywhere.** Nothing here is soft-deleted; dedup hard-deletes losing rows. If a
   table ever needs it, the rule is `deleted_at timestamptz`, never `is_deleted`.
 - **No table or column `COMMENT`s.** The reasoning lives in `package/db/src/schema.ts` docblocks,
-  which means it is invisible from `psql`.
-- **`sync_log` counts are plural** (`accounts_synced`, `posts_synced`, ...). They should be
-  `account_sync_count` and so on, per the `_count` rule.
-- **The map data path is `any`.** Three overlapping event shapes (`EventPopup`, `EventSidePanel`,
-  the marker payload) need unifying before it can be typed.
+  which means it is invisible from `psql`. Rules 19-21 (backup, retention, and placeholder tables
+  document their intent in a `COMMENT`) therefore cannot be satisfied at all yet.
+- **The schema has one migration, edited in place.** `0000_baseline.sql` is regenerated rather
+  than appended to, which is fine while nothing is deployed and stops being fine the moment
+  something is. The first real deployment needs a numbered migration, not a new baseline.
+- **`any` survives in 11 files**, 25 occurrences, mostly the map data path: three overlapping
+  event shapes (`EventPopup`, `EventSidePanel`, the marker payload) need unifying first. The
+  eslint rule is `warn` for exactly this reason and should be ratcheted to `error` once they are.
