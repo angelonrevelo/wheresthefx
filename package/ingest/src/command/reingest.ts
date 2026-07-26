@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import { fromRepoRoot } from '../env.js';
 import Database from 'better-sqlite3';
 import { normalizeCategory, type Category } from '@wheresthefx/core';
 import { sql as pgConnection } from '@wheresthefx/db';
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
   }
   const isDryRun = process.argv.includes('--dry-run');
 
-  const sqlite = new Database(dbPath, { readonly: true, fileMustExist: true });
+  const sqlite = new Database(fromRepoRoot(dbPath), { readonly: true, fileMustExist: true });
   const count: SyncCount = emptyCount();
   const syncLogId = isDryRun ? -1 : await startSyncRun();
 

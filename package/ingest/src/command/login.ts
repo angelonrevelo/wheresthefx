@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import { fromRepoRoot } from '../env.js';
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -23,7 +23,9 @@ import { dirname } from 'node:path';
  * hand, and the saved session is then reusable for weeks.
  */
 
-const SESSION_PATH = process.env.IG_SESSION_PATH ?? 'data/session/ig-session.json';
+const SESSION_PATH = fromRepoRoot(
+  process.env.IG_SESSION_PATH ?? 'data/session/ig-session.json',
+);
 const CHALLENGE_WAIT_MS = 180_000;
 
 async function main(): Promise<void> {

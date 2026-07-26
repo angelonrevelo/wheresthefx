@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import { fromRepoRoot } from '../env.js';
 import { sql as pgConnection } from '@wheresthefx/db';
 import { createStealthSession, jitteredDelay } from '../scraper/stealth.js';
 import { InstagramBlockedError, fetchRecentPost, resolveUserId } from '../scraper/instagram.js';
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   const session = await createStealthSession({
     headless: !option.isHeaded,
     proxyUrl: process.env.IG_PROXY_URL,
-    sessionPath: process.env.IG_SESSION_PATH ?? 'data/session/ig-session.json',
+    sessionPath: fromRepoRoot(process.env.IG_SESSION_PATH ?? 'data/session/ig-session.json'),
   });
 
   console.log(`Session: ${session.isAuthenticated ? 'authenticated' : 'anonymous (public profiles only)'}\n`);
