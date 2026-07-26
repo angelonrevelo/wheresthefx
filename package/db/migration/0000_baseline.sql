@@ -75,6 +75,7 @@ CREATE TABLE "saved_event" (
 CREATE TABLE "source_account" (
 	"source_account_id" serial PRIMARY KEY NOT NULL,
 	"username" text NOT NULL,
+	"ig_user_id" text,
 	"full_name" text,
 	"bio" text,
 	"profile_pic_url" text,
@@ -86,6 +87,8 @@ CREATE TABLE "source_account" (
 	"category" "account_category" DEFAULT 'other',
 	"venue_type" text,
 	"category_distribution" jsonb,
+	"typical_hours" text,
+	"recurring_event" jsonb,
 	"is_active" boolean DEFAULT true,
 	"last_scraped_at" timestamptz,
 	"created_at" timestamptz DEFAULT now() NOT NULL,

@@ -9,7 +9,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "reingest": "tsx src/command/reingest.ts"
+    "reingest": "tsx src/command/reingest.ts",
+    "scrape": "tsx src/command/scrape.ts",
+    "ig:login": "tsx src/command/login.ts"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.9.3",
@@ -18,6 +20,8 @@
     "@wheresthefx/db": "*",
     "dotenv": "^16.5.0",
     "better-sqlite3": "^11.8.1",
+    "fingerprint-injector": "^2.1.71",
+    "playwright": "^1.49.1",
     "drizzle-orm": "^0.39.3"
   },
   "devDependencies": {

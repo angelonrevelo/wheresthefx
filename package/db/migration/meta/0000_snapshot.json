@@ -1,5 +1,5 @@
 {
-  "id": "277f6b5b-cfbd-4e46-9e13-18e1f52c4783",
+  "id": "9e5c2cb0-ee68-44cb-b87a-559f56be59f0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -669,6 +669,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "ig_user_id": {
+          "name": "ig_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "full_name": {
           "name": "full_name",
           "type": "text",
@@ -735,6 +741,18 @@
         },
         "category_distribution": {
           "name": "category_distribution",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "typical_hours": {
+          "name": "typical_hours",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recurring_event": {
+          "name": "recurring_event",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

@@ -4,6 +4,7 @@ import { normalizeCategory, type Category } from '@wheresthefx/core';
 import { sql as pgConnection } from '@wheresthefx/db';
 import { assignReviewTier } from '../identity/hash.js';
 import { saveEvent, type EventDraft } from '../store/event.js';
+import { upsertAccount, type AccountCategory } from '../store/account.js';
 import { loadVenueIndex, upsertVenue } from '../store/venue.js';
 import {
   completeSyncRun,
@@ -36,6 +37,25 @@ interface SqliteVenue {
   lat: number | null;
   lng: number | null;
   instagram_handle: string | null;
+}
+
+interface SqliteAccount {
+  username: string;
+  ig_user_id: string | null;
+  display_name: string | null;
+  bio: string | null;
+  profile_pic_url: string | null;
+  follower_count: number | null;
+  following_count: number | null;
+  post_count: number | null;
+  is_verified: number | null;
+  is_business: number | null;
+  category: string | null;
+  is_active: number | null;
+  venue_type: string | null;
+  category_distribution: string | null;
+  typical_hours: string | null;
+  recurring_events: string | null;
 }
 
 interface SqliteEvent {
@@ -72,6 +92,18 @@ function parseJsonList(raw: string | null): string[] | null {
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter(v => typeof v === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+const ACCOUNT_CATEGORY = new Set(['nightlife', 'venue', 'promoter', 'artist', 'community', 'other']);
+
+function parseJsonObject<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as T) : null;
   } catch {
     return null;
   }
@@ -135,6 +167,42 @@ async function main(): Promise<void> {
       } catch (err) {
         count.error++;
         console.warn(`  venue "${row.name}" failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    // ---- Accounts: the watchlist the scraper reads ---------------------
+    const accountRowList = sqlite.prepare('SELECT * FROM ig_account').all() as SqliteAccount[];
+    console.log(`account: ${accountRowList.length} rows`);
+
+    for (const row of accountRowList) {
+      if (!row.username?.trim()) { count.error++; continue; }
+      try {
+        if (!isDryRun) {
+          await upsertAccount({
+            username: row.username.trim(),
+            igUserId: row.ig_user_id,
+            fullName: row.display_name,
+            bio: row.bio,
+            profilePicUrl: row.profile_pic_url,
+            followerCount: row.follower_count,
+            followingCount: row.following_count,
+            postCount: row.post_count,
+            isVerified: row.is_verified === 1,
+            isBusiness: row.is_business === 1,
+            category: row.category && ACCOUNT_CATEGORY.has(row.category)
+              ? (row.category as AccountCategory)
+              : 'other',
+            venueType: row.venue_type,
+            categoryDistribution: parseJsonObject<Record<string, number>>(row.category_distribution),
+            typicalHours: row.typical_hours,
+            recurringEvent: parseJsonObject<{ name: string; frequency: string }[]>(row.recurring_events),
+            isActive: row.is_active !== 0,
+          });
+        }
+        count.account++;
+      } catch (err) {
+        count.error++;
+        console.warn(`  account "${row.username}" failed: ${err instanceof Error ? err.message : err}`);
       }
     }
 

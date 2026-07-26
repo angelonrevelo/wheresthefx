@@ -227,6 +227,9 @@ export const venue = pgTable('venue', {
 export const sourceAccount = pgTable('source_account', {
   sourceAccountId: serial('source_account_id').primaryKey(),
   username: text('username').notNull().unique(),
+  /** Instagram's numeric user id. Cached because resolving it is a
+   *  separate, rate-limited profile call the scraper can then skip. */
+  igUserId: text('ig_user_id'),
   fullName: text('full_name'),
   bio: text('bio'),
   profilePicUrl: text('profile_pic_url'),
@@ -238,6 +241,8 @@ export const sourceAccount = pgTable('source_account', {
   category: accountCategoryEnum('category').default('other'),
   venueType: text('venue_type'),
   categoryDistribution: jsonb('category_distribution').$type<Record<string, number>>(),
+  typicalHours: text('typical_hours'),
+  recurringEvent: jsonb('recurring_event').$type<{ name: string; frequency: string }[]>(),
   isActive: boolean('is_active').default(true),
   lastScrapedAt: timestamp('last_scraped_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
