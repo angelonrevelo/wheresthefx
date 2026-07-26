@@ -6,9 +6,17 @@ import path from "path";
 export default defineConfig({
   server: {
     host: "::",
-    // Matches CORS_ORIGIN in .env.example. The config previously said 7000
-    // while the env files and docs all said 5173, so a fresh clone failed CORS.
     port: 5173,
+    // Same-origin in development too, so `/api/...` behaves here exactly
+    // as it does in production, where one process serves both. Without
+    // this, dev would need a cross-origin base URL and CORS config that
+    // production does not use — two shapes to keep working instead of one.
+    proxy: {
+      "/api": {
+        target: process.env.VITE_DEV_API_TARGET ?? "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [react()],
   resolve: {

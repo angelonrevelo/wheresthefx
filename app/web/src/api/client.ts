@@ -1,11 +1,13 @@
 /**
  * WheresTheFX API Client
  *
- * Replaces the old Supabase client. Communicates with the Express
- * backend at /api/* endpoints. Handles JWT auth token management.
+ * Communicates with the Express backend at /api/*. Handles JWT token
+ * management. Requests are same-origin in the deployed shape — see
+ * `base.ts`.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_BASE } from './base.js';
+
 
 /** Get stored JWT token */
 function getToken(): string | null {
@@ -93,7 +95,6 @@ export async function getMe() {
 export function logout() {
   clearToken();
 }
-
 
 /**
  * Build the best available image URL for an event.

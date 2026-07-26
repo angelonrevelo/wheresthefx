@@ -31,7 +31,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { existsSync, readdirSync, createReadStream, mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { sql } from '@wheresthefx/db';
 
 import eventsRouter from './route/events.js';
@@ -314,13 +315,43 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 });
 
 // ============================================================================
-// ERROR HANDLING
+// STATIC CLIENT
 // ============================================================================
 
 /** Unmatched API paths returned Express's HTML 404 to a JSON client. */
 app.use('/api', (_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
+
+/**
+ * Serve the built client from this process.
+ *
+ * One origin for the app and its API: no CORS, no preflight, no second
+ * host to keep in step, and one thing to deploy. Mounted after every
+ * /api route so it can never shadow one, and skipped entirely when no
+ * build is present (development runs the Vite dev server instead).
+ */
+const clientDir = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  process.env.CLIENT_DIST ?? '../../web/dist',
+);
+const hasClientBuild = existsSync(join(clientDir, 'index.html'));
+
+if (hasClientBuild) {
+  app.use(express.static(clientDir, {
+    // Hashed asset filenames are safe to cache hard; index.html is not,
+    // or a deploy would not be visible until the cache expired.
+    setHeaders: (res, path) => {
+      if (path.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+      else res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+  }));
+
+  // SPA fallback: client-side routes are not files on disk.
+  app.get(/.*/, (_req: Request, res: Response) => {
+    res.sendFile(join(clientDir, 'index.html'));
+  });
+}
 
 /**
  * Terminal error handler. There was none, so anything thrown outside a
@@ -351,10 +382,12 @@ const stopScheduler = startScheduler({
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`\n🎉 WheresTheFX API on http://localhost:${PORT}`);
+  console.log(`\n🎉 WheresTheFX on http://localhost:${PORT}`);
   console.log(`   Env:         ${IS_PRODUCTION ? 'production' : 'development'}`);
-  console.log(`   CORS:        ${allowedOrigin.length ? allowedOrigin.join(', ') : '(none configured)'}${IS_PRODUCTION ? '' : ' + localhost'}`);
-  console.log(`   Image cache: ${BLEAD_IMAGES_PATH || '(not configured)'}\n`);
+  console.log(`   Client:      ${hasClientBuild ? 'served from this process' : 'not built (API only)'}`);
+  console.log(`   CORS:        ${allowedOrigin.length ? allowedOrigin.join(', ') : '(none needed, same origin)'}${IS_PRODUCTION ? '' : ' + localhost'}`);
+  console.log(`   Image cache: ${BLEAD_IMAGES_PATH || '(not configured)'}`);
+  console.log(`   Ingest:      ${stopScheduler ? `every ${process.env.INGEST_INTERVAL_HOUR}h` : 'disabled'}\n`);
 });
 
 /**

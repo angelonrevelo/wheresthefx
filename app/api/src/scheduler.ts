@@ -104,11 +104,6 @@ export function startScheduler(option: SchedulerOption): (() => void) | null {
   initial.unref();
   repeating.unref();
 
-  console.log(
-    `   Ingest:      every ${option.intervalHour}h ` +
-    `(first run in ${option.initialDelayMinute ?? 5}m)`,
-  );
-
   return () => {
     clearTimeout(initial);
     clearInterval(repeating);

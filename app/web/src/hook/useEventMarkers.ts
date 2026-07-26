@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { groupEventsByProximity, type LocationMarker } from "@/util/cluster";
+import { API_BASE } from '@/api/base';
 
 interface UseEventMarkersOption {
   /** Manila `YYYY-MM-DD` bounds. Strings, not Date, so the browser's
@@ -11,7 +12,6 @@ interface UseEventMarkersOption {
   category?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function useEventMarkers(options: UseEventMarkersOption = {}) {
   return useQuery({
