@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asEventDate, asPrice, asTime, parseExtractionResponse, stripCodeFence } from './parse.js';
+import { asEventDate, asPrice, asTime, looksLikeHandle, parseExtractionResponse, stripCodeFence } from './parse.js';
 
 const POSTED = new Date('2026-07-26T00:00:00Z');
 
@@ -200,5 +200,50 @@ describe('enum fields', () => {
     expect(parse({ urlType: 'carrier-pigeon' }).result.urlType).toBeNull();
     expect(parse({ availabilityStatus: 'maybe' }).result.availabilityStatus).toBeNull();
     expect(parse({ availabilityStatus: 'sold_out' }).result.availabilityStatus).toBe('sold_out');
+  });
+});
+
+describe('looksLikeHandle — a venue is not an @mention', () => {
+  it('rejects the posting account own handle', () => {
+    // "electricstudioph" reached the venue directory from a live run,
+    // despite the prompt forbidding it. A handle cannot be geocoded and
+    // becomes a junk directory row.
+    expect(looksLikeHandle('electricstudioph', 'electricstudioph')).toBe(true);
+    expect(looksLikeHandle('mowsbar', 'mowsbar')).toBe(true);
+  });
+
+  it('rejects handle-shaped strings generally', () => {
+    expect(looksLikeHandle('creative.workshops.mnl')).toBe(true);
+    expect(looksLikeHandle('the_funroof')).toBe(true);
+    expect(looksLikeHandle('electricstudioph')).toBe(true);
+  });
+
+  it('accepts real venue names', () => {
+    for (const name of ["Mow's Bar", '19 East', 'SM Mall of Asia Arena', 'Apotheka Manila', 'Nokal']) {
+      expect(looksLikeHandle(name), name).toBe(false);
+    }
+  });
+
+  it('never rejects a multi-word name', () => {
+    // Spaces are the clearest signal a human wrote it as a place.
+    expect(looksLikeHandle('Electric Studio PH')).toBe(false);
+  });
+
+  it('nulls a handle venue during parsing', () => {
+    const { result } = parseExtractionResponse(
+      JSON.stringify({ isEvent: true, venueName: 'electricstudioph' }),
+      new Date('2026-07-26T00:00:00Z'),
+      'electricstudioph',
+    );
+    expect(result.venueName).toBeNull();
+  });
+
+  it('keeps a real venue during parsing', () => {
+    const { result } = parseExtractionResponse(
+      JSON.stringify({ isEvent: true, venueName: 'Electric Studio PH' }),
+      new Date('2026-07-26T00:00:00Z'),
+      'electricstudioph',
+    );
+    expect(result.venueName).toBe('Electric Studio PH');
   });
 });

@@ -31,6 +31,27 @@ const URL_TYPE: readonly UrlType[] = ['tickets', 'registration', 'rsvp', 'info',
 const AVAILABILITY_STATUS: readonly AvailabilityStatus[] = ['sold_out', 'waitlist', 'limited', 'early_bird'];
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * An Instagram handle, not a venue.
+ *
+ * The prompt forbids taking a venue from an @mention, and mostly it
+ * obeys — but "electricstudioph" still reached the venue directory from
+ * a live run. Handles are lowercase, unspaced, and often the posting
+ * account itself; a venue name a person would recognise is not.
+ */
+const HANDLE_SHAPED = /^[a-z0-9._]{3,30}$/;
+
+export function looksLikeHandle(venueName: string, username?: string | null): boolean {
+  const trimmed = venueName.trim();
+  if (trimmed.includes(' ')) return false;
+  if (!HANDLE_SHAPED.test(trimmed)) return false;
+  // The posting account's own handle is the common case, but any
+  // unspaced all-lowercase token is more likely a handle than a venue.
+  if (username && trimmed === username.toLowerCase().replace(/^@/, '')) return true;
+  return /[._]/.test(trimmed) || trimmed.length > 12;
+}
+
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Strip markdown fences the model adds despite being told not to. */
@@ -150,7 +171,11 @@ export interface ParseOutcome {
  * Never throws: an unparseable response yields an empty, non-event result
  * so one malformed row cannot abort a batch.
  */
-export function parseExtractionResponse(raw: string, postedAt: Date = new Date()): ParseOutcome {
+export function parseExtractionResponse(
+  raw: string,
+  postedAt: Date = new Date(),
+  username?: string | null,
+): ParseOutcome {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripCodeFence(raw));
@@ -198,7 +223,12 @@ export function parseExtractionResponse(raw: string, postedAt: Date = new Date()
       endTime: asTime(record.endTime),
       description: asString(record.description),
       artistList: asStringList(record.artists),
-      venueName: asString(record.venueName),
+      venueName: (() => {
+        const name = asString(record.venueName);
+        // Dropped rather than kept: a handle cannot be geocoded and
+        // becomes a junk row in the venue directory.
+        return name && looksLikeHandle(name, username) ? null : name;
+      })(),
       venueAddress: asString(record.venueAddress),
       locationStatus: oneOf(record.locationStatus, LOCATION_STATUS) ?? 'confirmed',
       price,

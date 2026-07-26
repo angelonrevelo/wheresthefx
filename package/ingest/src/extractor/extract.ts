@@ -60,7 +60,7 @@ export async function extractEvent(
         imageDataUriList,
         systemPrompt: prompt.system,
       });
-      const { result, unknownCategory } = parseExtractionResponse(completion.content, postedAt);
+      const { result, unknownCategory } = parseExtractionResponse(completion.content, postedAt, input.username);
 
       return {
         result,
