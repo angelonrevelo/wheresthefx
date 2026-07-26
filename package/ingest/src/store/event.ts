@@ -1,7 +1,12 @@
 import { db, event, subEvent } from '@wheresthefx/db';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Category } from '@wheresthefx/core';
-import { completenessScore, eventHash, type ReviewTier } from '../identity/hash.js';
+import {
+  completenessScore,
+  eventHash,
+  titleSimilarity,
+  type ReviewTier,
+} from '../identity/hash.js';
 
 /**
  * Event persistence.
@@ -62,7 +67,20 @@ export interface EventDraft {
   }[] | null;
 }
 
-export type SaveOutcome = 'inserted' | 'updated' | 'kept_existing';
+export type SaveOutcome = 'inserted' | 'updated' | 'kept_existing' | 'merged';
+
+/**
+ * How similar two titles must be, on the same date at the same venue,
+ * to count as the same event.
+ *
+ * High on purpose. A wrong merge deletes an event from the product and
+ * nobody notices; a missed merge shows two cards and someone might. The
+ * case this exists for is "PORKLABANAN: National Hog Festival 2026" vs
+ * "Porklabanan: National Hog Fest" — the same event posted twice, which
+ * the content hash cannot catch because "festival" and "fest" normalise
+ * differently.
+ */
+const FUZZY_MERGE_THRESHOLD = 0.75;
 
 /**
  * Insert or update one event, keyed on its content hash.
@@ -138,10 +156,65 @@ export async function saveEvent(draft: EventDraft): Promise<SaveOutcome> {
       return 'updated';
     }
 
+    // No exact hash match. Before inserting, check for the same event
+    // written differently — scoped to the same date and the same venue,
+    // so two genuinely different gigs on one night stay separate.
+    const nearDuplicate = await findNearDuplicate(tx, draft, score);
+    if (nearDuplicate) {
+      if (score <= nearDuplicate.completenessScore) return 'kept_existing';
+
+      // The better-described version wins, and keeps the existing row so
+      // any saved_event pointing at it survives.
+      await tx.update(event).set(value).where(eq(event.eventId, nearDuplicate.eventId));
+      await writeSubEvent(tx, nearDuplicate.eventId, draft.subEventList);
+      return 'merged';
+    }
+
     const [created] = await tx.insert(event).values(value).returning({ eventId: event.eventId });
     await writeSubEvent(tx, created.eventId, draft.subEventList);
     return 'inserted';
   });
+}
+
+/**
+ * An existing event that is probably this one under a different title.
+ *
+ * Candidates are restricted to the same date and the same venue before
+ * any similarity is computed: without that, "Jazz Night" at two
+ * different bars on one evening would merge, and one of them would
+ * vanish from the map.
+ */
+async function findNearDuplicate(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  draft: EventDraft,
+  _score: number,
+): Promise<{ eventId: number; completenessScore: number } | null> {
+  // Without a venue there is nothing safe to scope by, so no fuzzy match.
+  if (!draft.venueName) return null;
+
+  const candidateList = await tx.query.event.findMany({
+    where: and(
+      eq(event.eventDate, draft.eventDate),
+      eq(event.venueName, draft.venueName),
+    ),
+    columns: { eventId: true, title: true, completenessScore: true },
+    limit: 25,
+  });
+
+  let best: { eventId: number; completenessScore: number; similarity: number } | null = null;
+  for (const candidate of candidateList) {
+    const similarity = titleSimilarity(draft.title, candidate.title);
+    if (similarity < FUZZY_MERGE_THRESHOLD) continue;
+    if (!best || similarity > best.similarity) {
+      best = {
+        eventId: candidate.eventId,
+        completenessScore: candidate.completenessScore ?? 0,
+        similarity,
+      };
+    }
+  }
+
+  return best ? { eventId: best.eventId, completenessScore: best.completenessScore } : null;
 }
 
 /** Replace an event's sub-events. Runs inside the caller's transaction. */

@@ -52,6 +52,11 @@ export function eventHash(title: string, date: string, venue: string | null | un
 function normalizeForCompare(value: string): string {
   return value
     .toLowerCase()
+    // "&" and "and" are the same word to a reader and to a promoter, who
+    // will use both across two posts for one event. Unified before the
+    // character strip, which would otherwise delete the ampersand and
+    // leave a token count mismatch.
+    .replace(/&/g, ' and ')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .replace(/^.*?\bpresents?\s*/i, '')

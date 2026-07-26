@@ -85,6 +85,34 @@ describe('titleSimilarity', () => {
     expect(titleSimilarity('a', 'art fair')).toBeLessThan(0.9);
   });
 
+  it('treats & and "and" as the same word', () => {
+    // One promoter writes "Bo Razon & Friends", another writes
+    // "Bo Razon and Friends", for the same gig on the same night.
+    expect(titleSimilarity('Bo Razon & Friends Live at 19 East', 'Bo Razon and Friends at 19 East'))
+      .toBeGreaterThanOrEqual(0.75);
+  });
+
+  it('scores the real near-duplicates above the merge threshold', () => {
+    // Both observed in a live scrape of the same account.
+    expect(titleSimilarity(
+      'PORKLABANAN: National Hog Festival 2026',
+      'Porklabanan: National Hog Fest',
+    )).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it('keeps genuinely different events below it', () => {
+    // These share a venue and a date in practice, so only the title
+    // separates them. A false merge here deletes one from the map.
+    for (const [a, b] of [
+      ['Jazz Night', 'Rock Night'],
+      ['Freestyle at 19 East', 'Upcoming Gigs at 19 East'],
+      ['Open Mic Night', 'Comedy Night'],
+      ['Salcedo Saturday Market', 'Legazpi Sunday Market'],
+    ] as const) {
+      expect(titleSimilarity(a, b), `${a} / ${b}`).toBeLessThan(0.75);
+    }
+  });
+
   it('is symmetric', () => {
     const a = titleSimilarity('Jazz Night Live', 'Jazz Night');
     const b = titleSimilarity('Jazz Night', 'Jazz Night Live');
