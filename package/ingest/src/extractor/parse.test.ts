@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { asEventDate, asPrice, asTime, looksLikeHandle, parseExtractionResponse, stripCodeFence } from './parse.js';
+import {
+  asEventDate,
+  asPrice,
+  asTime,
+  looksLikeHandle,
+  looksLikeNonVenue,
+  parseExtractionResponse,
+  stripCodeFence,
+} from './parse.js';
 
 const POSTED = new Date('2026-07-26T00:00:00Z');
 
@@ -258,5 +266,65 @@ describe('looksLikeHandle — a venue is not an @mention', () => {
       'electricstudioph',
     );
     expect(result.venueName).toBe('Electric Studio PH');
+  });
+});
+
+describe('looksLikeNonVenue — a room is not a place', () => {
+  it('drops bare space descriptors', () => {
+    // "Activity Center" collected fourteen events with no coordinate.
+    for (const name of [
+      'Activity Center', 'ACTIVITY CENTER', 'Activity Park', 'Atrium', 'Lobby',
+      'Open Space', 'Open Park', 'Multiple Locations', 'the bar', 'TBA', 'The Tent',
+    ]) {
+      expect(looksLikeNonVenue(name), name).toBe(true);
+    }
+  });
+
+  it('keeps the same word once a building is attached', () => {
+    for (const name of [
+      'S Maison Atrium', 'The Dome, First United Building', 'Glorietta 4 Activity Center',
+      'Ayala Malls Circuit Activity Center', 'Palm Drive Activity Center',
+    ]) {
+      expect(looksLikeNonVenue(name), name).toBe(false);
+    }
+  });
+
+  it('drops a caption that leaked into the field', () => {
+    // This reached production verbatim.
+    expect(looksLikeNonVenue(
+      'Where: Manila (Exact location to be sent to confirmed participants) 🗓 When: '
+      + 'January 25, 2026 (Sunday) 🕙 Time: 10:00 AM to 1:00 PM',
+    )).toBe(true);
+    expect(looksLikeNonVenue('Venue: Nokal')).toBe(true);
+  });
+
+  it('keeps a real venue whose events carry its name', () => {
+    // Rejecting venueName == title looked obvious and a dry run killed
+    // it: an event named after where it happens is the normal case for a
+    // comedy club, a weekend market or a bar residency.
+    for (const name of [
+      'Vice Comedy Club', 'Legazpi Sunday Market', 'Salcedo Market',
+      'House Collab Underground', 'Art Fair Philippines',
+    ]) {
+      expect(looksLikeNonVenue(name), name).toBe(false);
+    }
+  });
+
+  it('keeps real venues, including the long and the odd', () => {
+    for (const name of [
+      "Mow's Bar", '19 East', 'Nokal', 'Central Park', 'Burgos Park', '78-45-33',
+      'SoFA Design Institute, 2F Proscenium Retail Row Rockwell',
+      'Alliance Française de Manille', 'Xin Chào', 'Tandang Sora Women’s Museum',
+    ]) {
+      expect(looksLikeNonVenue(name), name).toBe(false);
+    }
+  });
+
+  it('nulls a generic venue during parsing', () => {
+    const { result } = parseExtractionResponse(
+      JSON.stringify({ isEvent: true, eventTitle: 'Some Gig', venueName: 'Activity Center' }),
+      POSTED,
+    );
+    expect(result.venueName).toBeNull();
   });
 });

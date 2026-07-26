@@ -58,6 +58,73 @@ export function looksLikeHandle(venueName: string, username?: string | null): bo
   return /[._]/.test(trimmed) || trimmed.length > 12;
 }
 
+/**
+ * Words that name a space, never a place you navigate to.
+ *
+ * The prompt already forbids these by name and the current model obeys —
+ * every one of these in production came from the legacy extractions, not
+ * from a fresh scrape. The list exists anyway because the handle rule
+ * taught the same lesson twice: a prompt is a request, and one that slips
+ * through puts fourteen events on a row called "Activity Center".
+ *
+ * Only strings that are *entirely* one of these are dropped. "S Maison
+ * Atrium" and "The Dome, First United Building" name their building and
+ * are kept; a bare "Atrium" does not.
+ *
+ * Deliberately excluded: "Dome", "Sala", "Backroom", "Reserve". Each is
+ * generic in context and each is also plausibly somebody's bar, and a
+ * hardcoded list is the wrong place to gamble on that.
+ */
+const GENERIC_SPACE = new Set([
+  'activity center', 'activity centre', 'activity park', 'atrium', 'lobby', 'concourse',
+  'open space', 'open field', 'open park', 'function room', 'main hall', 'ballroom',
+  'covered court', 'covered courts',
+  'multiple locations', 'various venues', 'various locations', 'the venue', 'venue tba',
+  'tba', 'to be announced', 'the bar', 'the tent', 'exact location tba',
+]);
+
+/** A venue name no longer than this; past it, a caption leaked in. */
+const MAX_VENUE_NAME_LENGTH = 80;
+
+/** Caption scaffolding: "Where: Manila ... When: January 25 ... Time: 10:00 AM". */
+const CAPTION_LABEL = /\b(when|where|time|venue|details)\s*:/i;
+
+const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+
+function normalizeForCompare(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/['‘’ʼ`´]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * A venue name that names no venue.
+ *
+ * Deliberately does NOT reject a venue that matches the event title.
+ * That rule looked obvious and a dry run killed it: it took out "Vice
+ * Comedy Club", "Legazpi Sunday Market", "Salcedo Market" and "House
+ * Collab Underground", all real places whose events carry the venue's
+ * name. An event named after where it happens is the normal case for a
+ * comedy club, a weekend market or a bar residency, and far more common
+ * than the model answering the venue question with the event.
+ */
+export function looksLikeNonVenue(venueName: string): boolean {
+  const trimmed = venueName.trim();
+  if (trimmed === '') return true;
+
+  // A caption fragment reached venueName intact once: "Where: Manila
+  // (Exact location to be sent to confirmed participants) When: January
+  // 25, 2026 Time: 10:00 AM to 1:00 PM".
+  if (trimmed.length > MAX_VENUE_NAME_LENGTH) return true;
+  if (CAPTION_LABEL.test(trimmed)) return true;
+  if (EMOJI.test(trimmed)) return true;
+
+  return GENERIC_SPACE.has(normalizeForCompare(trimmed));
+}
+
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Strip markdown fences the model adds despite being told not to. */
@@ -231,9 +298,13 @@ export function parseExtractionResponse(
       artistList: asStringList(record.artists),
       venueName: (() => {
         const name = asString(record.venueName);
-        // Dropped rather than kept: a handle cannot be geocoded and
-        // becomes a junk row in the venue directory.
-        return name && looksLikeHandle(name, username) ? null : name;
+        if (!name) return null;
+        // Dropped rather than kept: neither a handle nor a bare room can
+        // be geocoded, and each becomes a junk row in the venue directory
+        // that then attracts more events.
+        if (looksLikeHandle(name, username)) return null;
+        if (looksLikeNonVenue(name)) return null;
+        return name;
       })(),
       venueAddress: asString(record.venueAddress),
       locationStatus: oneOf(record.locationStatus, LOCATION_STATUS) ?? 'confirmed',
