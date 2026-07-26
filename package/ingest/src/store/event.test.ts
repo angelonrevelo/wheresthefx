@@ -82,3 +82,37 @@ describe('isSameEvent — one side has no venue', () => {
       .toBe(false);
   });
 });
+
+describe('isSameEvent — a legacy row has a username but no account id', () => {
+  // Events carried across from the recovered snapshot never got a
+  // source_account_id. Comparing ids alone meant a legacy row could never
+  // merge with its re-extracted twin, which is the one pair the venue-less
+  // rule exists for. Re-extraction produced hundreds of identically
+  // titled pairs it refused to merge for want of an id neither would have.
+  const legacy = { venueName: null, sourceAccountId: null, sourceUsername: 'soukpopup' };
+  const fresh = { venueName: 'Estancia', sourceAccountId: ACCOUNT, sourceUsername: 'soukpopup' };
+
+  it('merges on the username when one side has no account id', () => {
+    expect(isSameEvent(legacy, fresh, 1)).toBe(true);
+  });
+
+  it('is case-insensitive, because the two sources cased it differently', () => {
+    expect(isSameEvent(legacy, { ...fresh, sourceUsername: 'SoukPopup' }, 1)).toBe(true);
+  });
+
+  it('still refuses two different accounts', () => {
+    expect(isSameEvent(legacy, { ...fresh, sourceUsername: 'otherpromoter' }, 1)).toBe(false);
+  });
+
+  it('still demands a near-identical title', () => {
+    expect(isSameEvent(legacy, fresh, 0.8)).toBe(false);
+  });
+
+  it('still refuses when both venues are named and differ', () => {
+    expect(isSameEvent(
+      { venueName: 'Estancia', sourceUsername: 'soukpopup' },
+      { venueName: 'Rizal Row', sourceUsername: 'soukpopup' },
+      1,
+    )).toBe(false);
+  });
+});

@@ -191,6 +191,7 @@ export async function saveEvent(draft: EventDraft): Promise<SaveOutcome> {
 export interface DuplicateCandidate {
   venueName?: string | null;
   sourceAccountId?: number | null;
+  sourceUsername?: string | null;
 }
 
 /**
@@ -221,9 +222,18 @@ export function isSameEvent(
   const eitherLackVenue = !draft.venueName || !candidate.venueName;
   if (!eitherLackVenue) return false;
 
+  // The username is checked too, not just the numeric id. Events carried
+  // across from the recovered snapshot have a null `source_account_id`
+  // and only a username, so an id-only comparison could never match a
+  // legacy row against a re-extracted one — which is exactly the pair
+  // this rule exists for. Re-extracting the snapshot produced hundreds of
+  // identically titled pairs that this refused to merge for want of an
+  // id neither side was ever going to have.
   const sameAccount = Boolean(
-    draft.sourceAccountId && candidate.sourceAccountId
-    && draft.sourceAccountId === candidate.sourceAccountId,
+    (draft.sourceAccountId && candidate.sourceAccountId
+      && draft.sourceAccountId === candidate.sourceAccountId)
+    || (draft.sourceUsername && candidate.sourceUsername
+      && draft.sourceUsername.toLowerCase() === candidate.sourceUsername.toLowerCase()),
   );
   return sameAccount && similarity >= VENUELESS_MERGE_THRESHOLD;
 }
@@ -239,7 +249,7 @@ async function findNearDuplicate(
     where: eq(event.eventDate, draft.eventDate),
     columns: {
       eventId: true, title: true, venueName: true,
-      completenessScore: true, sourceAccountId: true,
+      completenessScore: true, sourceAccountId: true, sourceUsername: true,
     },
     limit: 200,
   });
