@@ -14,8 +14,6 @@
     "ig:login": "tsx src/command/login.ts"
   },
   "dependencies": {
-    "@google-cloud/vertexai": "^1.9.3",
-    "@google/generative-ai": "^0.24.0",
     "@wheresthefx/core": "*",
     "@wheresthefx/db": "*",
     "dotenv": "^16.5.0",

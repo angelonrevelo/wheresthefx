@@ -27,6 +27,21 @@ describe('prompt structure', () => {
     expect(prompt).toContain('ACCOUNT: @testvenue');
   });
 
+  it('states the weekday of the post date', () => {
+    // Without this, "this Saturday" from a Tuesday post resolved to the
+    // Thursday: the model was being asked to do calendar arithmetic it
+    // gets wrong. Verified against gpt-4o-mini before and after.
+    expect(buildExtractionPrompt({ ...BASE, postedAt: '2026-02-10' }))
+      .toContain('POST DATE: 2026-02-10 (Tuesday)');
+    expect(buildExtractionPrompt({ ...BASE, postedAt: '2026-07-26' }))
+      .toContain('(Sunday)');
+  });
+
+  it('works the relative-day rule through with an example', () => {
+    const prompt = buildExtractionPrompt(BASE);
+    expect(prompt).toContain('"this Saturday" is 2026-02-14, NOT 2026-02-12');
+  });
+
   it('falls back to today when the post date is missing or unparseable', () => {
     const today = new Date().toISOString().slice(0, 10);
     expect(buildExtractionPrompt({ caption: 'x' })).toContain(`POST DATE: ${today}`);

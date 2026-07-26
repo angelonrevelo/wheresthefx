@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { CATEGORY } from '@wheresthefx/core';
-import { extractEvent } from './gemini.js';
+import { extractEvent } from './extract.js';
 import { PROMPT_VERSION } from '../prompt/extraction.js';
 
 /**
@@ -25,9 +25,14 @@ import { PROMPT_VERSION } from '../prompt/extraction.js';
  * Skipped unless an extraction backend is configured, because each row is
  * a real API call (136 rows ≈ 136 calls, a few minutes and real money):
  *
- *   GEMINI_API_KEY=... npx vitest run package/ingest/src/extractor/regression
+ *   OPENAI_API_KEY=... npx vitest run package/ingest/src/extractor/regression
  *
- * Run it before bumping PROMPT_VERSION. Record the score in the commit.
+ * Run it before bumping PROMPT_VERSION, or before switching EXTRACT_MODEL.
+ * Record the score in the commit.
+ *
+ * Note that a model change moves this number in both directions for
+ * reasons that are not quality: the labels are one specific model's
+ * output, so a different model disagreeing is expected, not a defect.
  */
 
 const FIXTURE_PATH = resolve(
@@ -49,9 +54,7 @@ interface CorpusRow {
 
 const corpus: CorpusRow[] = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8'));
 
-const hasBackend = Boolean(
-  process.env.VERTEX_PROJECT_ID || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-);
+const hasBackend = Boolean(process.env.EXTRACT_API_KEY || process.env.OPENAI_API_KEY);
 
 /**
  * Minimum agreement with the previous pipeline's categories.

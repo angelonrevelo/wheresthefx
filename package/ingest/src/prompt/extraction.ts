@@ -31,7 +31,7 @@ import { CATEGORY } from '@wheresthefx/core';
  * regression can be traced to the prompt that caused it. The golden
  * fixture suite must be re-run before a bump lands.
  */
-export const PROMPT_VERSION = '3.0.0';
+export const PROMPT_VERSION = '3.1.0';
 
 /** Where a venue's location resolved to, when it isn't a plain address. */
 export type LocationStatus = 'confirmed' | 'tba' | 'secret' | 'dm_for_details';
@@ -76,6 +76,24 @@ function toIsoDate(value: string | Date | null | undefined): string {
   return Number.isNaN(date.getTime())
     ? new Date().toISOString().slice(0, 10)
     : date.toISOString().slice(0, 10);
+}
+
+const WEEKDAY_NAME = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+] as const;
+
+/**
+ * Day of week for the post date.
+ *
+ * Supplied explicitly because models reliably get calendar arithmetic
+ * wrong: asked to resolve "this Saturday" from a bare `2026-02-10`, one
+ * returned the Thursday. Every relative-date rule in this prompt depends
+ * on knowing what day the post landed on, so it is stated rather than
+ * left to be derived.
+ */
+function toWeekday(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? 'unknown' : WEEKDAY_NAME[date.getUTCDay()];
 }
 
 function buildVenueContext(knownVenueList: string[] | null | undefined): string {
@@ -143,7 +161,7 @@ export function buildExtractionPrompt(input: PromptInput): string {
   return `You are an expert event extraction AI for Metro Manila, Philippines.
 Analyze this Instagram post and extract structured event data.
 
-POST DATE: ${postDate}
+POST DATE: ${postDate} (${toWeekday(postDate)})
 ACCOUNT: @${input.username || 'unknown'}
 CAPTION:
 ${input.caption || '(no caption)'}
@@ -185,7 +203,10 @@ STEP 2: DATE EXTRACTION
 - Year must be current year or +1
 - If date is before today → set isEvent: false, isHistoricalPost: true
 - Filipino: "Dis 15" = Dec 15, "Enero 3" = Jan 3, "ngayong Sabado" = this Saturday, "sa Biyernes" = next Friday
-- English relative: "this Saturday" / "this weekend" → compute from POST DATE. "Next Friday" → the Friday AFTER this week.
+- English relative: "this Saturday" / "this weekend" → count forward from POST DATE, whose
+  weekday is given above. "This <day>" means the NEXT occurrence of that day on or after the
+  post date. "Next <day>" means the occurrence after that one.
+  Worked example: post date Tuesday 2026-02-10 → "this Saturday" is 2026-02-14, NOT 2026-02-12.
 - "tanghali" = noon, "hatinggabi" = midnight
 
 YEAR RESOLUTION (CRITICAL for Dec-Jan):

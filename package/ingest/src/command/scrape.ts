@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { sql as pgConnection } from '@wheresthefx/db';
 import { createStealthSession, jitteredDelay } from '../scraper/stealth.js';
 import { InstagramBlockedError, fetchRecentPost, resolveUserId } from '../scraper/instagram.js';
-import { extractEvent, ExtractorAuthError } from '../extractor/gemini.js';
+import { extractEvent, ExtractorAuthError } from '../extractor/extract.js';
 import { assignReviewTier } from '../identity/hash.js';
 import { saveEvent } from '../store/event.js';
 import { listScrapeTarget, markAccountScraped } from '../store/account.js';
