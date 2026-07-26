@@ -31,7 +31,7 @@ import { CATEGORY } from '@wheresthefx/core';
  * regression can be traced to the prompt that caused it. The golden
  * fixture suite must be re-run before a bump lands.
  */
-export const PROMPT_VERSION = '4.0.0';
+export const PROMPT_VERSION = '4.1.0';
 
 /** Where a venue's location resolved to, when it isn't a plain address. */
 export type LocationStatus = 'confirmed' | 'tba' | 'secret' | 'dm_for_details';
@@ -328,6 +328,25 @@ VENUE vs ADDRESS (separate them!):
 - "📍 Greenbelt 5, Ayala Center, Makati" → venueName: "Greenbelt 5", venueAddress: "Ayala Center, Makati"
 - "📍 SM Mall of Asia" → venueName: "SM Mall of Asia", venueAddress: null
 - The venueName should be the building/establishment name, venueAddress should be the street/area
+
+VENUE IS THE BUILDING, NOT THE ROOM (CRITICAL for the map):
+venueName must be the establishment a person navigates to. Rooms, halls,
+gates, floors, wings and gallery numbers inside it are NOT separate venues —
+they belong in venueAddress or the description.
+- "Artinformal Gallery 2 and 3" → venueName: "Artinformal Gallery", venueAddress: "Gallery 2 and 3"
+- "Artinformal Gallery 1 & Lobby" → venueName: "Artinformal Gallery", venueAddress: "Gallery 1 and Lobby"
+- "Green Gate, Smart Araneta Coliseum" → venueName: "Smart Araneta Coliseum", venueAddress: "Green Gate"
+- "Activity Center, Glorietta" → venueName: "Glorietta", venueAddress: "Activity Center"
+- "Function Room B, Marriott Manila" → venueName: "Marriott Manila", venueAddress: "Function Room B"
+⚠️ One building = one venueName, always spelled the same way. Two events in
+different rooms of one gallery are at the SAME venue, and splitting them puts
+two pins on one address.
+
+IF THERE IS NO NAMED VENUE:
+Set venueName to null. Do NOT invent a placeholder. "Multiple Locations",
+"Various Venues", "the bar", "Open Space", "Activity Park" and the event's own
+name are NOT venues — a null venue is honest and mappable-later, a made-up one
+is neither.
 
 ONLINE/VIRTUAL EVENTS:
 - "Zoom workshop" / "Live on IG" / "Online event" → venueName: null, locationStatus: "confirmed"

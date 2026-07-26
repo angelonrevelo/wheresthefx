@@ -121,6 +121,24 @@ describe('hard-won rules that must survive edits', () => {
     expect(prompt).toContain('Market VENDORS are NOT sub-events');
   });
 
+  it('keeps the building-not-room rule', () => {
+    // Six rows appeared for one gallery — "Artinformal Gallery",
+    // "... 2 and 3", "... 1 & Lobby" — because the model extracted the
+    // room. One building is one venue, or the map grows pins for
+    // corridors.
+    expect(prompt).toContain('VENUE IS THE BUILDING, NOT THE ROOM');
+    expect(prompt).toContain('One building = one venueName');
+    expect(prompt).toContain('Artinformal Gallery 2 and 3');
+    expect(prompt).toContain('Green Gate, Smart Araneta Coliseum');
+  });
+
+  it('requires a null venue rather than an invented one', () => {
+    // "Multiple Locations", "the bar", "Open Space" all reached the
+    // venue directory from the previous pipeline and none can be placed.
+    expect(prompt).toContain('Set venueName to null. Do NOT invent a placeholder');
+    expect(prompt).toContain('are NOT venues');
+  });
+
   it('keeps the doors-vs-show-time rule', () => {
     expect(prompt).toContain('eventTime = the EARLIER time (doors/gates)');
   });
