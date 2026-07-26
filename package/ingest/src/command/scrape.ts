@@ -10,7 +10,7 @@ import { CostMeter, loadExtractedMarker, needsExtraction } from '../store/cost.j
 import { assignReviewTier } from '../identity/hash.js';
 import { saveEvent } from '../store/event.js';
 import { listScrapeTarget, markAccountScraped } from '../store/account.js';
-import { loadVenueIndex } from '../store/venue.js';
+import { loadVenueIndex, loadVenueNameList } from '../store/venue.js';
 import { savePost } from '../store/post.js';
 import { runGeocode } from '../geocode/run.js';
 import {
@@ -322,13 +322,6 @@ async function main(): Promise<void> {
     await session.close();
     await pgConnection.end({ timeout: 5 });
   }
-}
-
-/** Venue names spliced into the extraction prompt so spellings match. */
-async function loadVenueNameList(): Promise<string[]> {
-  const { db, venue } = await import('@wheresthefx/db');
-  const rowList = await db.select({ name: venue.name }).from(venue);
-  return rowList.map(row => row.name);
 }
 
 void main();

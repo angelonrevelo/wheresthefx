@@ -193,3 +193,15 @@ export async function recordGeocode(
     updatedAt: new Date(),
   }).where(eq(venue.venueId, venueId));
 }
+
+/**
+ * Venue names spliced into the extraction prompt so spellings match.
+ *
+ * Lives here rather than in the scraper because re-extraction needs the
+ * same list: a prompt shown a different directory produces different
+ * spellings, and the point of the list is that it does not.
+ */
+export async function loadVenueNameList(): Promise<string[]> {
+  const rowList = await db.select({ name: venue.name }).from(venue);
+  return rowList.map(row => row.name);
+}
