@@ -56,7 +56,10 @@ export async function extractEvent(
 
   for (let attempt = 0; attempt <= maxRetry; attempt++) {
     try {
-      const completion = await complete(config, prompt, { imageDataUriList });
+      const completion = await complete(config, prompt.user, {
+        imageDataUriList,
+        systemPrompt: prompt.system,
+      });
       const { result, unknownCategory } = parseExtractionResponse(completion.content, postedAt);
 
       return {

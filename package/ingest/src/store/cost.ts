@@ -21,6 +21,10 @@ import { inArray } from 'drizzle-orm';
 
 /** Prices in USD per token. Keep in step with the provider's page. */
 const MODEL_PRICE: Record<string, { input: number; output: number }> = {
+  // Note: on a data-sharing OpenAI account these are the *overflow*
+  // rates. The daily free allotment is spent first, so steady-state
+  // spend at this volume is often zero. Priced anyway, because an
+  // account without data sharing pays from the first token.
   'gpt-4o-mini': { input: 0.15 / 1_000_000, output: 0.60 / 1_000_000 },
   'gpt-4o': { input: 2.50 / 1_000_000, output: 10.00 / 1_000_000 },
   'gpt-4.1-mini': { input: 0.40 / 1_000_000, output: 1.60 / 1_000_000 },
