@@ -12,14 +12,16 @@ import { PROMPT_VERSION, buildExtractionPrompt } from './extraction.js';
  * deleting a rule that looked redundant.
  */
 
-const BASE = { caption: 'Test event', username: 'testvenue', postedAt: '2026-07-26' };
+import type { PromptInput } from './extraction.js';
+
+const BASE: PromptInput = { caption: 'Test event', username: 'testvenue', postedAt: '2026-07-26' };
 
 /** The rules half. */
-const rulesFor = (input = BASE) => buildExtractionPrompt(input).system;
+const rulesFor = (input: PromptInput = BASE) => buildExtractionPrompt(input).system;
 /** The post half — attacker-controlled content lives here. */
-const postFor = (input = BASE) => buildExtractionPrompt(input).user;
+const postFor = (input: PromptInput = BASE) => buildExtractionPrompt(input).user;
 /** Both, for assertions that do not care which half. */
-const bothFor = (input = BASE) => {
+const bothFor = (input: PromptInput = BASE) => {
   const p = buildExtractionPrompt(input);
   return `${p.system}
 ${p.user}`;

@@ -48,6 +48,7 @@ import {
   safeContentType,
 } from './lib/imageGuard.js';
 import { firstParam } from './lib/param.js';
+import { startScheduler } from './scheduler.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001');
@@ -335,6 +336,16 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // START SERVER
 // ============================================================================
 
+/**
+ * The ingest runs inside this service rather than from crontab, so the
+ * deployment is one supervised process instead of an API, a cron entry,
+ * and whatever that cron spawns.
+ */
+const stopScheduler = startScheduler({
+  intervalHour: Number(process.env.INGEST_INTERVAL_HOUR ?? 0),
+  initialDelayMinute: Number(process.env.INGEST_INITIAL_DELAY_MINUTE ?? 5),
+});
+
 const server = app.listen(PORT, () => {
   console.log(`\n🎉 WheresTheFX API on http://localhost:${PORT}`);
   console.log(`   Env:         ${IS_PRODUCTION ? 'production' : 'development'}`);
@@ -347,14 +358,16 @@ const server = app.listen(PORT, () => {
  * every PM2 restart killed in-flight requests and leaked PG connections
  * until the pool timed out.
  */
-async function shutdown(signal: string): Promise<void> {
+async function shutdown(signal: string, exitCode = 0): Promise<void> {
   console.log(`\n${signal} received, draining...`);
 
   const forceExit = setTimeout(() => {
     console.error('Drain timed out, exiting.');
-    process.exit(1);
+    process.exit(exitCode || 1);
   }, 10_000);
   forceExit.unref();
+
+  stopScheduler?.();
 
   server.close(async () => {
     try {
@@ -363,9 +376,22 @@ async function shutdown(signal: string): Promise<void> {
       console.error('Error closing database pool:', err);
     }
     console.log('Shutdown complete.');
-    process.exit(0);
+    process.exit(exitCode);
   });
 }
+
+/**
+ * A port already in use is an operator error, not a bug. Say so in one
+ * line rather than printing a stack trace that buries the cause.
+ */
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Set PORT to a free port.`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
+});
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
@@ -376,7 +402,11 @@ process.on('unhandledRejection', (reason) => {
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
-  void shutdown('uncaughtException');
+  // Exit non-zero. Draining on a fatal error is right, but exiting 0
+  // told pm2 the process had stopped cleanly — a crash loop on
+  // EADDRINUSE looked identical to a healthy restart, and did so 20
+  // times before anyone noticed.
+  void shutdown('uncaughtException', 1);
 });
 
 export default app;
