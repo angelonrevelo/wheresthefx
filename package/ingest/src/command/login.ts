@@ -64,13 +64,40 @@ async function main(): Promise<void> {
     const consent = page.getByRole('button', { name: /allow all|accept/i }).first();
     await consent.click({ timeout: 5000 }).catch(() => undefined);
 
-    // Wait for hydration rather than assuming it.
-    await page.waitForSelector('input[name="username"]', { timeout: 45_000 });
-    await page.fill('input[name="username"]', username, { timeout: 30_000 });
-    await page.fill('input[name="password"]', password);
-    await page.getByRole('button', { name: /log in/i }).first().click();
+    // Try to fill the form, but never depend on it.
+    //
+    // Instagram serves a bot-detection variant to some clients where the
+    // form never renders, and answers others with a checkpoint. Both are
+    // things a person can get past and a script cannot, so a failure
+    // here is not fatal: the browser stays open and the loop below waits
+    // for a session cookie however it arrives.
+    let didAutofill = false;
+    try {
+      await page.waitForSelector('input[name="username"]', { timeout: 20_000 });
+      await page.fill('input[name="username"]', username, { timeout: 15_000 });
+      await page.fill('input[name="password"]', password);
+      await page.getByRole('button', { name: /log in/i }).first().click();
+      didAutofill = true;
+      console.log('Credentials submitted.');
+    } catch {
+      console.log('\nCould not fill the form automatically.');
+      if (isHeadless) {
+        console.error('Re-run without --headless so you can log in by hand.');
+        process.exitCode = 1;
+        return;
+      }
+    }
 
-    console.log('Submitted. Waiting for the session cookie...');
+    if (!isHeadless) {
+      console.log(
+        `\n  A browser window is open.\n` +
+        `  ${didAutofill
+          ? 'Clear any checkpoint it shows (2FA, "was this you?", a captcha).'
+          : `Log in as @${username} yourself.`}\n` +
+        `  This will detect the session automatically and save it.\n` +
+        `  Waiting up to ${CHALLENGE_WAIT_MS / 60_000} minutes...\n`,
+      );
+    }
 
     // `sessionid` appearing is the only reliable signal of success —
     // Instagram's post-login redirects vary by account and challenge.
