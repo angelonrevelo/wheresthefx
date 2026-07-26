@@ -12,6 +12,7 @@ import { saveEvent } from '../store/event.js';
 import { listScrapeTarget, markAccountScraped } from '../store/account.js';
 import { loadVenueIndex } from '../store/venue.js';
 import { savePost } from '../store/post.js';
+import { runGeocode } from '../geocode/run.js';
 import {
   completeSyncRun, emptyCount, failSyncRun, startSyncRun, type SyncCount,
 } from '../store/sync.js';
@@ -291,6 +292,20 @@ async function main(): Promise<void> {
       }
 
       await jitteredDelay(DELAY_BETWEEN_ACCOUNT_MS);
+    }
+
+    // Geocode before closing the run out. A venue met for the first time
+    // this pass has no coordinates, and an event without coordinates is
+    // not on the map — so skipping this makes the scrape's work
+    // invisible. The previous pipeline never called it at all.
+    if (!option.isDryRun) {
+      const geocode = await runGeocode();
+      if (geocode.attempted > 0) {
+        console.log(
+          `geocode: ${geocode.resolved}/${geocode.attempted} resolved, ` +
+          `${geocode.eventUpdated} event(s) placed on the map`,
+        );
+      }
     }
 
     if (!option.isDryRun) await completeSyncRun(syncLogId, count);
