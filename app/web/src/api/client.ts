@@ -170,7 +170,7 @@ export interface EventsResponse {
 
 export async function fetchEvents(params: Record<string, string> = {}) {
   const query = new URLSearchParams(params).toString();
-  return apiFetch<EventsResponse>(`/api/event${query ? '?' + query : ''}`);
+  return apiFetch<EventsResponse>(`/api/events${query ? '?' + query : ''}`);
 }
 
 export async function fetchUpcomingEvents(limit = 50) {
