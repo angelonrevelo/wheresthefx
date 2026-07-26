@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { findRepoRoot } from '@wheresthefx/core';
 
 /**
  * In-process ingest scheduler.
@@ -37,8 +39,9 @@ export interface SchedulerOption {
 /** Guards against a slow run overlapping the next tick. */
 let isRunning = false;
 
-function runScrape(cwd: string): Promise<void> {
-  return new Promise((resolveRun) => {
+function runScrape(cwd: string): Promise<number> {
+  return new Promise<number>((resolveRun) => {
+    let exitCode = 0;
     const child = spawn(
       'npx',
       ['tsx', 'package/ingest/src/command/scrape.ts', '--limit', '40'],
@@ -55,12 +58,14 @@ function runScrape(cwd: string): Promise<void> {
     // Never rejects. A failed scrape is logged to sync_log by the child
     // itself; it must not become an unhandled rejection up here.
     child.on('close', (code) => {
-      if (code !== 0) console.error(`[ingest] exited ${code}`);
-      resolveRun();
+      exitCode = code ?? 0;
+      if (exitCode !== 0) console.error(`[ingest] exited ${exitCode}`);
+      resolveRun(exitCode);
     });
     child.on('error', (err) => {
       console.error('[ingest] could not start:', err.message);
-      resolveRun();
+      exitCode = 1;
+      resolveRun(exitCode);
     });
   });
 }
@@ -73,8 +78,15 @@ async function tick(cwd: string): Promise<void> {
   isRunning = true;
   const startedAt = Date.now();
   try {
-    await runScrape(cwd);
-    console.log(`[ingest] finished in ${Math.round((Date.now() - startedAt) / 1000)}s`);
+    const exitCode = await runScrape(cwd);
+    const elapsedSecond = Math.round((Date.now() - startedAt) / 1000);
+    // Reporting "finished" for a run that exited non-zero is how this
+    // looked healthy while failing every tick.
+    console.log(
+      exitCode === 0
+        ? `[ingest] finished in ${elapsedSecond}s`
+        : `[ingest] FAILED after ${elapsedSecond}s (exit ${exitCode})`,
+    );
   } catch (err) {
     // Belt and braces: runScrape never rejects, but a throw here would
     // otherwise reach the process-level handler and drain the API.
@@ -93,7 +105,11 @@ async function tick(cwd: string): Promise<void> {
 export function startScheduler(option: SchedulerOption): (() => void) | null {
   if (!Number.isFinite(option.intervalHour) || option.intervalHour <= 0) return null;
 
-  const cwd = option.cwd ?? resolve(process.cwd(), '../..');
+  // Anchored to this module, not the cwd. pm2 starts the process from
+  // the repo root while `npm run dev` starts it from app/api, so any
+  // fixed number of `..` is wrong in one of those cases — it resolved to
+  // `/` under pm2 and the scheduler failed on every tick, silently.
+  const cwd = option.cwd ?? findRepoRoot(dirname(fileURLToPath(import.meta.url)));
   const intervalMs = option.intervalHour * 60 * 60 * 1000;
   const initialDelayMs = (option.initialDelayMinute ?? 5) * 60 * 1000;
 
