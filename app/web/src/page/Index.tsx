@@ -73,7 +73,7 @@ const Index = () => {
     <div className={`min-h-screen transition-colors duration-1000 ${isMapUnlocked ? 'bg-black' : 'bg-background'}`}>
       {/* Verification overlay */}
       <div
-        className={`fixed inset-0 z-50 bg-white transition-opacity duration-1000 flex ${
+        className={`fixed inset-0 z-50 bg-background transition-opacity duration-1000 flex ${
           isVerified ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
       >

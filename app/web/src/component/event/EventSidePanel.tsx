@@ -32,7 +32,7 @@ export function EventSidePanel({ event, onClose }: EventSidePanelProps) {
 
   return (
     <>
-      <div className="fixed top-[52px] right-[var(--card-margin)] bottom-[var(--card-margin)] w-[calc(100%-var(--card-margin)*2)] md:w-[380px] z-[var(--z-panel)] glass-card flex flex-col animate-slide-in-right overflow-hidden">
+      <div className="fixed top-[84px] right-[var(--card-margin)] bottom-[var(--card-margin)] w-[calc(100%-var(--card-margin)*2)] md:w-[380px] z-[var(--z-panel)] glass-card flex flex-col animate-slide-in-right overflow-hidden">
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="px-3.5 py-3 border-b border-border/30 flex items-center justify-between">
