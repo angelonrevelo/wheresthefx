@@ -74,11 +74,11 @@ const Index = () => {
       {/* Verification overlay */}
       <div
         className={`fixed inset-0 z-50 bg-white transition-opacity duration-1000 flex ${
-          isVerified ? 'opacity-0 pointer-event-none' : 'opacity-100'
+          isVerified ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
       >
         <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
-          <div className="absolute bottom-0 right-0 pointer-event-none select-none translate-x-1/4 translate-y-1/4 z-0">
+          <div className="absolute bottom-0 right-0 pointer-events-none select-none translate-x-1/4 translate-y-1/4 z-0">
             <span className="math-function text-[40rem] text-muted-foreground/20 leading-none">
               f(x)
             </span>

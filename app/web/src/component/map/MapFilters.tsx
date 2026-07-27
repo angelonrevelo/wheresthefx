@@ -69,7 +69,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
       <div className="flex items-center gap-1.5 px-3 py-2.5">
         {/* Search */}
         <div className="relative flex-1 min-w-0 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/50 pointer-event-none" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/50 pointer-events-none" />
           <input
             className="w-full h-8 glass-control rounded-lg pl-8 pr-3 text-xs text-white placeholder:text-white/40 focus:outline-none"
             placeholder="Search event..."

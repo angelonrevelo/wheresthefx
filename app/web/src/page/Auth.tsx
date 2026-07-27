@@ -95,8 +95,8 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
       {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/10 pointer-event-none" aria-hidden="true" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/5 via-transparent to-transparent pointer-event-none" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/10 pointer-events-none" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/5 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
 
       {/* Back button */}
       <Button

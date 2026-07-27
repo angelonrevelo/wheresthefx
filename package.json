@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Metro Manila event discovery — map, ingestion pipeline, and API",
+  "description": "Metro Manila event discovery \u2014 map, ingestion pipeline, and API",
   "workspaces": [
     "app/*",
     "package/*"
@@ -13,9 +13,9 @@
     "lint": "eslint .",
     "lint:naming": "tsx script/validate-naming.ts",
     "lint:copy": "tsx script/validate-copy.ts",
-    "//lint:lock": "The exact check the server runs. `npm ci --omit=dev` refuses to install when package.json and package-lock.json disagree, so a version typed by hand into one and not the other does not fail here, or in the tests, or in the build — it fails halfway through a deploy. Costs a second from cache.",
+    "//lint:lock": "The exact check the server runs. `npm ci --omit=dev` refuses to install when package.json and package-lock.json disagree, so a version typed by hand into one and not the other does not fail here, or in the tests, or in the build \u2014 it fails halfway through a deploy. Costs a second from cache.",
     "lint:lock": "npm ci --dry-run",
-    "check": "npm run lint:naming && npm run lint:copy && npm run lint && npm run typecheck && npm run test && npm run build",
+    "check": "npm run lint:naming && npm run lint:copy && npm run lint:class && npm run lint && npm run typecheck && npm run test && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:web": "npm run dev --workspace @wheresthefx/web",
@@ -23,7 +23,8 @@
     "build": "npm run build --workspaces --if-present",
     "db:generate": "npm run db:generate --workspace @wheresthefx/db",
     "db:migrate": "npm run db:migrate --workspace @wheresthefx/db",
-    "db:studio": "npm run db:studio --workspace @wheresthefx/db"
+    "db:studio": "npm run db:studio --workspace @wheresthefx/db",
+    "lint:class": "tsx script/validate-class.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
