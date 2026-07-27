@@ -1,8 +1,22 @@
 # API Reference
 
-Base URL: `https://api.wheresthefx.com/api` (production) or `http://localhost:3001/api` (local)
+Base URL: `https://www.wheresthefx.com/api` (production) or
+`http://localhost:3001/api` (local). `https://api.wheresthefx.com/api`
+still resolves to the same process and is kept for older clients, but the
+client is served from the same origin as the API now, so nothing in the
+product uses it.
 
-All responses use **snake_case** keys (auto-converted by middleware). Common envelope:
+All responses use **snake_case** keys, shaped by explicit DTOs in
+`app/api/src/lib/dto.ts`. They were previously produced by a
+`snakeCaseResponse` middleware that walked every response object. That
+was replaced because it was not injective — `imageURL` became
+`image_u_r_l`, `Authorization` became `_authorization` — and because it
+would have mangled the JSONB payloads the schema now carries. A DTO also
+makes the public contract explicit, which is what stopped `id`
+disappearing from responses when the primary keys were renamed to
+`{table}_id`.
+
+Common envelope:
 
 ```json
 {

@@ -12,11 +12,13 @@ Modeled after [sisia-app CONVENTIONS.md](../../../sisia-app/docs/CONVENTIONS.md)
 | **Timestamps**         | Every table gets `created_at TIMESTAMPTZ DEFAULT NOW()`      | —                                             |
 | **Constrained values** | Named Postgres ENUMs                                         | `CREATE TYPE event_category AS ENUM (...)`    |
 | **Indexes**            | `idx_{table}_{column}`                                       | `idx_event_date`, `idx_event_category`        |
-| **Primary keys**       | `id SERIAL` (current), `{table}_id` preferred for new tables | `event.id` (existing)                         |
+| **Primary keys**       | `{table}_id`, never a bare `id`                              | `event_id`, `venue_id`, `sync_log_id`         |
 
 > [!NOTE]
-> Tables now use singular names following sisia convention. `users` was renamed to
-> `account` to avoid PostgreSQL reserved word. `user_preferences` → `account_preference`.
+> Tables use singular names. `users` was renamed to `account` to avoid the
+> PostgreSQL reserved word, and `user_preferences` to `account_preference`.
+> `script/validate-naming.ts` enforces the table, column, primary-key and
+> `timestamptz` rules; it fails the build rather than warning.
 
 ## TypeScript
 
@@ -29,9 +31,15 @@ Modeled after [sisia-app CONVENTIONS.md](../../../sisia-app/docs/CONVENTIONS.md)
 
 ## API Response Format
 
-All API responses use **snake_case** keys. The `snakeCaseResponse` middleware
-in `server/src/middleware/snakeCase.ts` auto-converts Drizzle's camelCase output
-to snake_case before sending. Route handlers don't need to worry about casing.
+All API responses use **snake_case** keys, shaped by explicit DTOs in
+`app/api/src/lib/dto.ts`.
+
+A `snakeCaseResponse` middleware used to walk every response and convert
+casing automatically. It was removed: it was not injective (`imageURL`
+became `image_u_r_l`), it would have mangled JSONB payloads, and because
+it derived the contract from whatever the ORM returned, renaming the
+primary keys to `{table}_id` silently dropped `id` from every response.
+A DTO makes the public shape something you have to change on purpose.
 
 ### Example response
 
@@ -75,27 +83,58 @@ to snake_case before sending. Route handlers don't need to worry about casing.
 
 ## File Organization
 
+An npm workspace monorepo. Directory names are singular, and that is
+enforced too.
+
 ```
-server/
-├── src/
-│   ├── db/            ← Schema + connection (Drizzle ORM)
-│   ├── routes/        ← HTTP handlers
-│   ├── middleware/     ← Auth, CORS, snake_case transform
-│   └── scripts/       ← Ingest, geocoding, one-off scripts
-src/
-├── api/               ← API client (fetch wrapper, types)
-├── hooks/             ← React Query hooks (useEventMarkers, etc.)
-├── components/        ← UI components
-├── pages/             ← Route pages
-└── utils/             ← Shared utilities
+app/api/src/
+├── lib/          ← param parsing, DTOs, SSRF and freshness guards
+├── middleware/   ← JWT auth
+├── route/        ← HTTP handlers
+└── scheduler.ts  ← in-process ingest timer
+app/web/src/
+├── api/          ← API client
+├── component/    ← UI
+├── constant/     ← category colours
+├── hook/         ← React Query hooks
+├── page/         ← route pages
+└── util/         ← cluster, markerIcon, smoothWheelZoom
+package/
+├── core/         ← taxonomy, Manila time, repo root
+├── db/           ← schema + migration, the only copy
+└── ingest/       ← scrape, extract, geocode, store
 ```
+
+See [README.md](README.md) for the full tree.
+
+## Gates
+
+Three custom gates run in `npm run check`, before ESLint. Each exists
+because the mistake it catches is silent — none of them would be caught
+by TypeScript or a linter.
+
+| Gate | Script | Catches |
+| --- | --- | --- |
+| naming | `script/validate-naming.ts` | plural table or directory names, bare `id` primary keys, `timestamp` without a zone, raw Drizzle in a route |
+| copy | `script/validate-copy.ts` | em dashes in text a user reads. Comments keep theirs |
+| class | `script/validate-class.ts` | Tailwind class names that do not exist |
+
+The class gate is the newest. `pointer-event-none` — singular — appeared
+eighteen times across ten files; Tailwind's utility is plural, so every
+one of them was silently dropped. One was load-bearing: an invisible
+overlay kept intercepting input and the map could not be dragged at all.
+The rule list holds mistakes actually made in this repo, not everything
+Tailwind might reject, because a gate that guesses gets switched off.
+
+`npm run check` also builds the client. Lint and typecheck both pass on a
+bundle that will not build.
 
 ## Future Improvements
 
 These are tracked but deferred:
 
-- [x] Rename tables to singular (`event` instead of `events`) — ✅ Done
-- [x] Rename `users` → `account` (sisia reserved-word convention) — ✅ Done
-- [ ] Rename PKs to `{table}_id` (`event_id` instead of `id`)
+- [x] Rename tables to singular (`event` instead of `events`)
+- [x] Rename `users` → `account` (reserved-word convention)
+- [x] Rename PKs to `{table}_id`
 - [ ] Add DAL layer (no raw Drizzle in routes)
 - [ ] Add `{Entity}Row` and `{Entity}Safe` shared types

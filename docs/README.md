@@ -1,303 +1,222 @@
 # WheresTheFX
 
-**Metro Manila Event Discovery Platform** — Find parties, thrift markets, live music, food events, and more on an interactive map.
+**Metro Manila event discovery** — parties, markets, live music, film and workshops on an interactive map.
 
-**Production:** [www.wheresthefx.com](https://www.wheresthefx.com) | **API:** [api.wheresthefx.com](https://api.wheresthefx.com/api/events/map)
+**Production:** [www.wheresthefx.com](https://www.wheresthefx.com)
 
-## Architecture
+The site, the API and the ingestion pipeline are one Node process behind
+nginx. There is no separate frontend host and no separate API host: the
+API serves the built client from the same origin, so there is no CORS in
+production and nothing to keep in sync between two deploys.
 
-```
-┌─────────────────────────────────────────────────┐
-│                    blead (VPS)                   │
-│  Playwright + Gemini AI → SQLite (ig-events.db)  │
-│  Scrapes ~157 Instagram accounts daily           │
-└─────────────────┬───────────────────────────────┘
-                  │ ingest script (every 6hrs)
-                  ▼
-┌─────────────────────────────────────────────────┐
-│              WheresTheFX Server                  │
-│  Express.js + Drizzle ORM + PostgreSQL           │
-│  REST API: /api/events, /api/venues, etc.        │
-│  Image proxy for Instagram CDN fallback          │
-│  JWT auth                                        │
-│  Port: 3001                                      │
-└─────────────────┬───────────────────────────────┘
-                  │ fetch API
-                  ▼
-┌─────────────────────────────────────────────────┐
-│              WheresTheFX Client                  │
-│  React + Vite + TypeScript + Tailwind            │
-│  Leaflet dark-themed map                         │
-│  Category filters, search, date/price filters    │
-│  Math verification landing page                  │
-│  Port: 5173                                      │
-└─────────────────────────────────────────────────┘
-```
+## Quick start
 
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL (OrbStack or local)
-- blead repo at `../blead` (for ingest)
-
-### Setup
-
-This is an npm workspace monorepo — install once at the root.
+Node 18+ and PostgreSQL. This is an npm workspace monorepo — install once
+at the root.
 
 ```bash
-# 1. Create PostgreSQL database
 psql -c "CREATE DATABASE wheresthefx;"
 
-# 2. Configure environment
 cp .env.example .env
-# JWT_SECRET is required and must be 32+ chars — the API refuses to start
-# without it. Generate one with: openssl rand -base64 48
+# JWT_SECRET is required and must be 32+ chars; the API refuses to start
+# without it. Generate one with: openssl rand -hex 32
 
-# 3. Install everything
 npm install
-
-# 4. Apply the schema
 npm run db:migrate
 
-# 5. Run ingest (needs data/ig-events.db — see docs/ingest.md)
-npm run ingest --workspace @wheresthefx/api
-
-# 6. Start the API and the client, in separate shells
-npm run dev:api    # → http://localhost:3001
-npm run dev:web    # → http://localhost:5173
+npm run dev:api    # http://localhost:3001 — API + scheduler
+npm run dev:web    # http://localhost:5173 — client with a dev proxy
 ```
 
-### Verifying
+An empty database serves an empty map. To fill it see [ingest.md](ingest.md);
+the short version is `npm run ig:login --workspace @wheresthefx/ingest`
+once, then `npm run scrape --workspace @wheresthefx/ingest`.
+
+## Verifying
 
 ```bash
-npm run typecheck   # all workspaces, strict
-npm run lint
-npm run test
+npm run check
 ```
 
-These three are the gate CI enforces on every push.
+One command, and the only one that matters before a push. It runs, in
+order: the naming gate, the copy gate, the class gate, ESLint, typecheck
+across every workspace, the test suite, and a production build of the
+client.
 
-### Environment Variables
+The build is part of the gate deliberately. Lint and typecheck both pass
+on a bundle that will not build — a Node-only module reached the browser
+through a shared package, `vite build` failed, and the deployed site kept
+running on a stale `dist/` while the source was edited.
 
-Copy `.env.example` to `.env` and configure:
+`npm run lint:lock` is separate and not in `check`: it is the exact check
+the server runs (`npm ci` refuses to install when `package.json` and the
+lockfile disagree), and it costs a network round trip.
 
-| Variable            | Description                          | Default                                                     |
-| ------------------- | ------------------------------------ | ----------------------------------------------------------- |
-| `DATABASE_URL`      | PostgreSQL connection string         | `postgresql://postgres:postgres@localhost:5432/wheresthefx` |
-| `JWT_SECRET`        | **Required.** 32+ chars, no default. | — (startup fails without it)                                |
-| `BLEAD_DB_PATH`     | Source SQLite for the ingest         | `./data/ig-events.db`                                       |
-| `BLEAD_IMAGES_PATH` | Local image cache, if present        | — (proxy falls back to CDN)                                 |
-| `PORT`              | API port                             | `3001`                                                      |
-| `CORS_ORIGIN`       | Allowed origin, comma-separated      | `http://localhost:5173`                                     |
-| `VITE_API_URL`      | API base URL (client)                | `http://localhost:3001`                                     |
+## Environment
 
-## Project Structure
+Copy `.env.example` to `.env`.
 
-An npm workspace monorepo. Directory names are singular, per
-[CONVENTIONS.md](CONVENTIONS.md).
+| Variable | Description | Default |
+| --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/wheresthefx` |
+| `JWT_SECRET` | **Required.** 32+ chars. Startup fails without it. | none |
+| `PORT` | API port | `3001` |
+| `NODE_ENV` | `production` tightens CORS to `CORS_ORIGIN` only | unset |
+| `CORS_ORIGIN` | Allowed origins, comma-separated. Unused in production, where the client is same-origin. | `http://localhost:5173` |
+| `CLIENT_DIST` | Built client to serve | `../../web/dist` |
+| `VITE_API_URL` | API base URL compiled into the client | `http://localhost:3001` |
+| `VITE_DEV_API_TARGET` | Where the dev server proxies `/api` | `http://localhost:3001` |
+| `IG_USERNAME` | Instagram account for the scraper | none |
+| `IG_PASSWORD` | Password for that account | none |
+| `IG_SESSION_PATH` | Where the logged-in session is cached | `./data/session/ig-session.json` |
+| `IG_PROXY_URL` | Optional proxy for scraping | none |
+| `EXTRACT_BASE_URL` | OpenAI-compatible endpoint | `https://api.openai.com/v1` |
+| `EXTRACT_API_KEY` | Key for that endpoint. `OPENAI_API_KEY` is accepted as a fallback. | none |
+| `EXTRACT_MODEL` | Extraction model | `gpt-4.1-mini` |
+| `INGEST_INTERVAL_HOUR` | Hours between scheduled scrapes | `6` |
+| `INGEST_INITIAL_DELAY_MINUTE` | Delay before the first scrape after boot | `5` |
+| `GEOCODE_CONTACT` | Contact address sent to Nominatim, as its usage policy requires | none |
+| `BLEAD_DB_PATH` | Recovered SQLite snapshot, for the one-off import commands only | `./data/ig-events.db` |
+| `BLEAD_IMAGES_PATH` | Local image cache, if present | none — the proxy falls back to the CDN |
+
+## Project structure
+
+Directory names are singular, per [CONVENTIONS.md](CONVENTIONS.md).
 
 ```
 wheresthefx/
 ├── app/
-│   ├── api/                     # Express REST API  (@wheresthefx/api)
+│   ├── api/                      # Express 5 — API, static client, scheduler
 │   │   └── src/
-│   │       ├── lib/param.ts     # Validated query/route param parsing
-│   │       ├── middleware/      # auth (JWT), snakeCase response
-│   │       ├── routes/          # events, venues, categories, auth, users
-│   │       ├── scripts/         # ingest, dedup, geocode
-│   │       └── index.ts         # App entry, CORS, image proxy, health
-│   └── web/                     # Vite + React client  (@wheresthefx/web)
+│   │       ├── lib/              # param parsing, DTOs, SSRF + freshness guards
+│   │       ├── middleware/       # JWT auth
+│   │       ├── route/            # event, venue, category, auth, user
+│   │       ├── scheduler.ts      # in-process ingest timer (replaces cron)
+│   │       └── index.ts          # entry, image proxy, health, SPA fallback
+│   └── web/                      # Vite + React client
 │       └── src/
-│           ├── api/client.ts    # API client
-│           ├── components/      # events, badges, map, shared, ui
-│           ├── hooks/
-│           ├── pages/           # Index (map), Auth, NotFound
-│           ├── types/filter.ts  # Map filter shape
-│           └── utils/           # markerUtils, dateRange, dateUtils
+│           ├── api/client.ts
+│           ├── component/        # event, badge, map, ui
+│           ├── constant/         # category colours
+│           ├── page/             # Index (map), Auth, NotFound
+│           └── util/             # cluster, markerIcon, smoothWheelZoom, dateRange
 ├── package/
-│   ├── core/                    # Shared contracts  (@wheresthefx/core)
-│   │   └── src/
-│   │       ├── category.ts      # THE canonical 12-category taxonomy
-│   │       └── time.ts          # Manila-time helpers
-│   ├── db/                      # Schema + migration  (@wheresthefx/db)
-│   │   ├── migration/           # Drizzle migrations (versioned)
-│   │   └── src/schema.ts        # 9 tables — single source of truth
-│   └── ingest/                  # In-house scrape + AI pipeline (in progress)
-├── docs/
-├── data/                        # gitignored — recovered SQLite, backups
-└── package.json                 # Workspace root
+│   ├── core/                     # contracts both sides must agree on
+│   │   └── src/                  # category taxonomy, Manila time, repo root
+│   ├── db/                       # Drizzle schema + versioned migration
+│   └── ingest/                   # scrape, extract, geocode, store
+│       ├── fixture/              # venue aliases, OSM gazetteer, golden set
+│       ├── script/               # one-off data builders
+│       └── src/
+│           ├── command/          # every runnable entry point
+│           ├── extractor/        # model backend, prefilter, response parsing
+│           ├── geocode/          # Nominatim client with bounds guards
+│           ├── identity/         # event hash, similarity, review tier
+│           ├── prompt/           # the versioned extraction prompt
+│           ├── scraper/          # Playwright + Instagram private API
+│           └── store/            # account, event, post, venue, cost, sync
+├── script/                       # deploy + the three lint gates
+└── docs/
 ```
 
 ### Why the shared packages exist
 
-`package/db` holds the only copy of the schema. Previously the API and
-the ingest each kept their own, which is how the ingest came to write
-~20 columns that did not exist — Drizzle discards unknown keys silently,
-so it looked like it was working while writing NULLs.
+`package/db` holds the only copy of the schema. The API and the ingest
+each kept their own, which is how the ingest came to write ~20 columns
+that did not exist — Drizzle discards unknown keys silently, so it looked
+like it was working while writing NULLs.
 
 `package/core` holds anything both sides must agree on. The category
 taxonomy lived in three places with three different value sets, and the
 sync between them collapsed five of the twelve categories to `other` on
 every run.
 
-## Data Pipeline
+`findRepoRoot` is exported from `@wheresthefx/core/repo`, not from the
+package index: it reads the filesystem, and the index is bundled into the
+browser.
 
-### Source: blead
+## How data arrives
 
-blead is a separate system that scrapes Instagram daily:
-
-- **157 accounts** tracked (venues, promoters, organizers in Metro Manila)
-- **Playwright** headless browser extracts posts
-- **Gemini AI** classifies posts as events and extracts structured data
-- Stores everything in SQLite at `data/ig-events.db`
-
-### Ingest: SQLite → PostgreSQL
-
-The `ingest-from-blead.ts` script syncs data:
-
-1. **Venues** — matched by `name` (UNIQUE)
-2. **Accounts** — matched by `username` (UNIQUE)
-3. **Posts** — matched by `shortcode` (UNIQUE)
-4. **Events** — matched by `event_hash` (SHA256 of title+date+venue)
-5. **Sub-events** — delete + re-insert per parent event
-
-Run every 6 hours via cron on the VPS:
-
-```bash
-0 0,6,12,18 * * * cd /path/to/wheresthefx && npm run ingest --workspace @wheresthefx/api
+```
+Instagram  ──►  scraper (Playwright + private v1 feed)
+                    │
+                    ▼
+              prefilter — drops what is demonstrably not an event
+                    │
+                    ▼
+              extraction — OpenAI-compatible, versioned prompt, system/user split
+                    │
+                    ▼
+              parse + guard — bounded dates, prices, venues, categories
+                    │
+                    ▼
+              store — content-hash dedup, then a fuzzy tier
+                    │
+                    ▼
+              geocode — Nominatim, inside the run, bounded to Metro Manila
 ```
 
-### Data state (July 2026)
+The scheduler in `app/api` runs this every `INGEST_INTERVAL_HOUR` hours,
+in-process. There is no cron.
 
-The pipeline stopped running around 19 June 2026. The site and API stayed
-up, but inventory aged out — production holds 1,920 events of which only a
-handful are still upcoming. Bringing ingestion in-house is the active work.
+Each pass takes the accounts least recently scraped, up to `--limit` (the
+scheduler passes 40), skipping any scraped within the last 20 hours. A
+full sweep of the ~200-account watchlist therefore takes about a day.
 
-Recovered from the VPS into `data/` (gitignored):
+## API
 
-| Table          | Count |
-| -------------- | ----- |
-| Accounts       | 212   |
-| Posts          | 5,652 |
-| Events         | 2,368 |
-| Sub-events     | 2,740 |
-| Known venues   | 361   |
-| Image cache    | 3.6GB (left on the VPS) |
+Every endpoint is under `/api`. See [api.md](api.md) for request and
+response shapes.
 
-## API Reference
+| Method | Path | Auth |
+| --- | --- | --- |
+| `POST` | `/auth/register`, `/auth/login` | no |
+| `GET` | `/auth/me` | yes |
+| `GET` | `/events`, `/events/upcoming`, `/events/map`, `/events/:id` | optional |
+| `GET` | `/venues`, `/venues/:id`, `/venues/:id/events` | no |
+| `GET` | `/categories` | no |
+| `GET`, `POST` | `/users/me/saved` | yes |
+| `GET`, `PUT` | `/users/me/preferences` | yes |
+| `GET` | `/images/proxy?url=…&shortcode=…` | no |
+| `GET` | `/health` | no |
 
-All endpoints are prefixed with `/api`. All responses use **snake_case** keys.
-See [docs/api.md](api.md) for full reference.
+`/health` reports database reachability and ingest freshness. It is the
+monitor whose absence let the pipeline sit dead for months.
 
-### Auth
+## Database
 
-| Method | Path             | Description    | Auth |
-| ------ | ---------------- | -------------- | ---- |
-| `POST` | `/auth/register` | Create account | No   |
-| `POST` | `/auth/login`    | Login, get JWT | No   |
-| `GET`  | `/auth/me`       | Current user   | Yes  |
-
-### Events
-
-| Method | Path               | Description             | Auth     |
-| ------ | ------------------ | ----------------------- | -------- |
-| `GET`  | `/events`          | List events (paginated) | Optional |
-| `GET`  | `/events/upcoming` | Future events           | No       |
-| `GET`  | `/events/map`      | Events with geocoding   | No       |
-| `GET`  | `/events/:id`      | Event detail            | Optional |
-
-Query params: `category`, `search`, `is_free`, `date_from`, `date_to`, `page`, `limit`
-
-### Venues
-
-| Method | Path                 | Description     | Auth |
-| ------ | -------------------- | --------------- | ---- |
-| `GET`  | `/venues`            | All venues      | No   |
-| `GET`  | `/venues/:id`        | Venue detail    | No   |
-| `GET`  | `/venues/:id/events` | Events at venue | No   |
-
-### Categories
-
-| Method | Path          | Description            | Auth |
-| ------ | ------------- | ---------------------- | ---- |
-| `GET`  | `/categories` | Categories with counts | No   |
-
-### User
-
-| Method | Path                    | Description        | Auth |
-| ------ | ----------------------- | ------------------ | ---- |
-| `GET`  | `/users/me/saved`       | Saved events       | Yes  |
-| `POST` | `/users/me/saved`       | Toggle save event  | Yes  |
-| `GET`  | `/users/me/preferences` | Get preferences    | Yes  |
-| `PUT`  | `/users/me/preferences` | Update preferences | Yes  |
-
-### Image Proxy
-
-| Method | Path                                  | Description            |
-| ------ | ------------------------------------- | ---------------------- |
-| `GET`  | `/images/proxy?url=...&shortcode=...` | Proxy Instagram images |
-
-## Database Schema
-
-9 tables connected via foreign keys:
-
-- **venue** — Canonical venue directory with geocoding
-- **source_account** — Instagram accounts being tracked
-- **source_post** — Raw IG posts with AI extraction data
-- **event** — Core event data with `event_hash` dedup
-- **sub_event** — Multi-act lineups and schedules
-- **account** — Platform user accounts (bcrypt passwords)
-- **saved_event** — User bookmarks (many-to-many)
-- **account_preference** — Preferred categories
-- **sync_log** — Ingest run tracking
-
-Key design decisions:
-
-- No dependency on blead's internal IDs
-- `event_hash` (SHA256) for deduplication
-- Denormalized `venue_name`/`source_username` for query performance
-- JSONB arrays for `artists`
-- API responses auto-converted to snake_case by `snakeCaseResponse` middleware
+Nine tables. [schema.md](schema.md) is the reference and
+`package/db/src/schema.ts` is the source of truth:
+`venue`, `source_account`, `source_post`, `event`, `sub_event`,
+`account`, `saved_event`, `account_preference`, `sync_log`.
 
 ## Deployment
 
-### VPS (Express API)
-
 ```bash
-# Sync server code to VPS
-rsync -avz --delete --exclude='node_modules' --exclude='.env' --exclude='drizzle' \
-  server/ root@217.216.72.28:/root/wheresthefx-api/
-
-# Restart on VPS
-ssh root@217.216.72.28 "pm2 restart wheresthefx-api"
+./script/deploy.sh
 ```
 
-- API: `https://api.wheresthefx.com` (port 3001 behind Caddy reverse proxy)
-- SSL: Let's Encrypt via Caddy
-- Process manager: PM2
+Runs `npm run check`, ships the whole source tree, builds the client on
+the host from what just landed, restarts under pm2, and fails loudly if
+the health check is not 200. `.env` and `data/` are excluded — they hold
+the live credentials and the Instagram session. Pass `--skip-check` when
+you have just run the gate.
 
-### Vercel (Frontend)
+Production is a single pm2 process behind nginx, with Let's Encrypt
+covering both `wheresthefx.com` and `www.wheresthefx.com`. The apex
+redirects to `www`.
 
-```bash
-# Deploy to production
-vercel --prod --yes
-```
+## Tech stack
 
-- Frontend: `https://www.wheresthefx.com`
-- Env: `VITE_API_URL=https://api.wheresthefx.com`
-- DNS: Namecheap BasicDNS → Vercel
-
-## Tech Stack
-
-| Layer         | Technology                               |
-| ------------- | ---------------------------------------- |
-| Frontend      | React 18, Vite, TypeScript, Tailwind CSS |
-| UI Components | shadcn/ui (Radix primitives)             |
-| Map           | Leaflet with custom markers              |
-| Backend       | Express.js, TypeScript                   |
-| ORM           | Drizzle ORM                              |
-| Database      | PostgreSQL (OrbStack)                    |
-| Auth          | JWT (jsonwebtoken + bcryptjs)            |
-| Data Source   | blead (Playwright + Gemini AI → SQLite)  |
+| Layer | Technology |
+| --- | --- |
+| Client | React 18, Vite, TypeScript, Tailwind, shadcn/ui |
+| Map | Leaflet, dark CARTO basemap, SVG markers, smooth wheel zoom |
+| API | Express 5, TypeScript |
+| ORM | Drizzle |
+| Database | PostgreSQL |
+| Auth | JWT + bcrypt |
+| Scraping | Playwright + fingerprint-injector |
+| Extraction | OpenAI-compatible chat completions |
+| Geocoding | Nominatim |
+| Process | pm2, nginx |

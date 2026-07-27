@@ -1,47 +1,71 @@
 ---
-description: How to run the blead-to-PostgreSQL ingest pipeline to sync event data
+description: How to run the in-house Instagram ingest pipeline
 ---
 
-# Run Ingest Pipeline
+# Run the ingest pipeline
 
-Syncs event data from blead's SQLite database into WheresTheFX PostgreSQL.
+Scrapes Instagram, extracts events with the versioned prompt, geocodes,
+and writes to PostgreSQL. It runs itself every `INGEST_INTERVAL_HOUR`
+hours inside the API process — this is how to run it by hand.
+
+Full detail in [docs/ingest.md](../../docs/ingest.md).
 
 ## Prerequisites
 
-- PostgreSQL `wheresthefx` database exists with schema pushed
-- blead repo at `../blead` with `data/ig-events.db`
-- Server dependencies installed
+- PostgreSQL reachable via `DATABASE_URL`
+- Migrations applied: `npm run db:migrate`
+- `EXTRACT_API_KEY` set, and `GEOCODE_CONTACT` if geocoding
+- A cached Instagram session (below)
 
-## Steps
+## Log in once
 
-// turbo-all
-
-1. Run the ingest script:
-
-```bash
-cd /Users/angelonrevelo/Antigravity/wheresthefx/server && BLEAD_DB_PATH=/Users/angelonrevelo/Antigravity/blead/data/ig-events.db DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wheresthefx npx tsx src/scripts/ingest-from-blead.ts
-```
-
-2. Verify the sync log:
+The login is human-in-the-loop on purpose. It is the step most likely to
+hit a checkpoint, and automating it makes that failure silent.
 
 ```bash
-/opt/homebrew/Cellar/postgresql@15/15.15_1/bin/psql postgresql://postgres:postgres@localhost:5432/wheresthefx -c "SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 1;"
+npm run ig:login --workspace @wheresthefx/ingest
 ```
 
-## Expected Output
+A browser opens; sign in; the session is cached at `IG_SESSION_PATH`.
+That file is a live credential and is gitignored.
 
+## Scrape
+
+```bash
+# See what it would do, without spending anything or writing rows.
+npm run scrape --workspace @wheresthefx/ingest -- --limit 5 --dry-run
+
+# For real.
+npm run scrape --workspace @wheresthefx/ingest -- --limit 40
 ```
-🔄 Starting blead → WheresTheFX sync...
-📍 Syncing venues...       ✅ 118 venues
-👤 Syncing accounts...     ✅ 157 accounts
-📸 Syncing posts...        ✅ 1317 posts
-🎉 Syncing events...       ✅ 230 events
-🎤 Syncing sub-events...   ✅ 178 sub-events
-✅ Sync completed in ~2s
+
+`--limit` counts accounts, not posts. Each pass takes the accounts least
+recently scraped and skips any scraped in the last 20 hours, so running
+it twice in a row is close to a no-op.
+
+## Check the run
+
+```bash
+psql "$DATABASE_URL" -c "
+  SELECT sync_log_id, status, started_at, completed_at,
+         post_synced_count, event_synced_count, error_count
+  FROM sync_log ORDER BY sync_log_id DESC LIMIT 3;"
 ```
 
-## Troubleshooting
+A run killed by a restart stays `running` forever, which the health check
+reads as "a sync is in progress". Mark abandoned rows `failed` rather
+than deleting them.
 
-- If `BLEAD_DB_PATH` error: Ensure the blead repo has `data/ig-events.db`
-- If connection refused: Ensure PostgreSQL is running (OrbStack)
-- If table errors: Run `drizzle-kit push` first to create schema
+## Audit afterwards
+
+These report and never write:
+
+```bash
+npx tsx package/ingest/src/command/audit-duplicate.ts
+npx tsx package/ingest/src/command/verify-venue-pin.ts
+npx tsx package/ingest/src/command/audit-watchlist.ts
+```
+
+The repair commands all take `--dry-run`. Read the dry run before
+applying — every guard in them exists because a dry run caught the code
+getting something wrong.

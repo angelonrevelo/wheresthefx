@@ -1,214 +1,236 @@
-# Database Schema Reference
+# Database schema
 
-All column names follow **snake_case** convention. Tables use **singular nouns** (sisia convention). See [CONVENTIONS.md](CONVENTIONS.md) for full rules.
+`package/db/src/schema.ts` is the source of truth. This page is a
+reference, generated against the live database — if the two disagree,
+the schema file wins and this page is stale.
+
+Columns are `snake_case`. Tables are singular nouns and every primary key
+is `{table}_id`, never a bare `id`. Every timestamp is `timestamptz`.
+See [CONVENTIONS.md](CONVENTIONS.md); `script/validate-naming.ts` enforces
+all three.
 
 ## Enums
 
-### event_category
+| Enum | Values |
+| --- | --- |
+| `event_category` | `nightlife`, `music`, `arts`, `film`, `comedy`, `food`, `markets`, `sports`, `fitness`, `workshops`, `tech`, `community` — plus legacy `art_culture`, `gaming`, `other` |
+| `event_status` | `confirmed`, `rescheduled`, `cancelled`, `postponed`, `tentative` |
+| `availability_status` | `available`, `sold_out`, `waitlist`, `limited`, `early_bird` |
+| `location_status` | `confirmed`, `tba`, `secret`, `dm_for_details` |
+| `review_tier` | `ready`, `quick`, `full`, `rejected`, `pending` |
+| `account_category` | `nightlife`, `venue`, `promoter`, `artist`, `community`, `other` |
+| `sync_status` | `running`, `completed`, `failed` |
 
-Values: `nightlife`, `music`, `art_culture`, `markets`, `food`, `comedy`, `workshops`, `community`, `sports`, `gaming`, `fitness`, `film`, `tech`, `other`
+The twelve real categories are the canonical taxonomy in
+`package/core/src/category.ts`. `art_culture` and `gaming` are retired
+values kept only so old rows still read; `normalizeCategory` maps them
+forward. `other` is not a category the extractor may choose — an
+unrecognised value surfaces as `null` plus the raw string, because
+coercing to `other` is how five of the twelve were silently lost.
 
-### event_status
-
-Values: `confirmed`, `tentative`, `cancelled`, `postponed`, `rescheduled`
-
-### availability_status
-
-Values: `available`, `limited`, `sold_out`, `waitlist`, `early_bird`
-
-### location_status
-
-Values: `confirmed`, `approximate`, `unresolved`, `online`
-
-### review_tier
-
-Values: `auto_publish`, `quick_review`, `full_review`, `pending`
-
-### account_category
-
-Values: `nightlife`, `venue`, `promoter`, `artist`, `community`, `other`
-
-### sync_status
-
-Values: `running`, `completed`, `failed`
-
----
+`location_status` carries `secret` and `dm_for_details` because Manila's
+underground scene routinely announces events that way, and flattening
+them to `confirmed` destroys the distinction.
 
 ## Tables
 
 ### venue
 
-Canonical venue directory with geocoding. Matches blead VPS schema.
+Canonical venue directory.
 
-| Column     | Type             | Constraints      | Description            |
-| ---------- | ---------------- | ---------------- | ---------------------- |
-| id         | serial           | PK               | Auto-increment ID      |
-| name       | text             | UNIQUE, NOT NULL | Venue name (dedup key) |
-| address    | text             |                  | Full address           |
-| lat        | double precision |                  | Latitude               |
-| lng        | double precision |                  | Longitude              |
-| category   | text             |                  | Venue category         |
-| created_at | timestamptz      | DEFAULT now()    |                        |
-| updated_at | timestamptz      | DEFAULT now()    |                        |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `venue_id` | serial | PK |
+| `name` | text | NOT NULL, UNIQUE |
+| `alias` | jsonb | Other spellings; read by the venue matcher |
+| `address`, `city` | text | |
+| `lat`, `lng` | real | Null until geocoded |
+| `category` | text | |
+| `instagram_handle` | text | |
+| `geocode_attempted_at` | timestamptz | Set whether or not geocoding succeeded, so permanent failures stop being retried |
+| `created_at` | timestamptz | NOT NULL |
+| `updated_at` | timestamptz | |
 
 ### source_account
 
-Instagram accounts tracked by blead.
+The Instagram watchlist.
 
-| Column     | Type        | Constraints      | Description             |
-| ---------- | ----------- | ---------------- | ----------------------- |
-| id         | serial      | PK               |                         |
-| username   | text        | UNIQUE, NOT NULL | IG username (dedup key) |
-| full_name  | text        |                  | Display name            |
-| is_active  | boolean     | DEFAULT true     |                         |
-| created_at | timestamptz | DEFAULT now()    |                         |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `source_account_id` | serial | PK |
+| `username` | text | NOT NULL, UNIQUE |
+| `ig_user_id` | text | Cached numeric id; resolving it is a separate rate-limited call |
+| `full_name`, `bio`, `profile_pic_url` | text | |
+| `follower_count`, `following_count`, `post_count` | integer | |
+| `is_verified`, `is_business` | boolean | |
+| `category` | `account_category` | Classifies the poster, not the event |
+| `venue_type` | text | Drives the extractor's venue-profile override |
+| `category_distribution` | jsonb | Historical category mix, same purpose |
+| `typical_hours` | text | |
+| `recurring_event` | jsonb | |
+| `is_active` | boolean | Deactivate rather than delete |
+| `last_scraped_at` | timestamptz | Drives scrape ordering |
+| `created_at` | timestamptz | NOT NULL |
 
 ### source_post
 
-Instagram posts scraped by blead.
+Raw posts plus extraction provenance.
 
-| Column         | Type        | Constraints         | Description              |
-| -------------- | ----------- | ------------------- | ------------------------ |
-| id             | serial      | PK                  |                          |
-| account_id     | integer     | FK → source_account |                          |
-| shortcode      | text        | UNIQUE, NOT NULL    | IG shortcode (dedup key) |
-| post_url       | text        | NOT NULL            | Full IG URL              |
-| caption        | text        |                     | Post caption             |
-| posted_at      | timestamptz |                     | Original post time       |
-| image_url      | text        |                     | Image URL                |
-| likes_count    | integer     | DEFAULT 0           |                          |
-| comments_count | integer     | DEFAULT 0           |                          |
-| created_at     | timestamptz | DEFAULT now()       |                          |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `source_post_id` | serial | PK |
+| `account_id` | integer | FK → `source_account` |
+| `shortcode` | text | NOT NULL, UNIQUE — the dedup key |
+| `post_url` | text | NOT NULL |
+| `post_type` | text | |
+| `caption` | text | |
+| `posted_at` | timestamptz | |
+| `image_url` | text | |
+| `image_url_list` | jsonb | |
+| `like_count`, `comment_count` | integer | |
+| `is_event` | boolean | |
+| `raw_extraction` | jsonb | The model's full response |
+| `extraction_method` | text | |
+| `extraction_model` | text | |
+| `prompt_version` | text | Which prompt produced this row |
+| `extracted_at` | timestamptz | |
+| `ai_confidence` | real | |
+| `created_at` | timestamptz | NOT NULL |
+
+The provenance columns are what make a quality question answerable.
+Without them, "is the model ignoring this rule or do these rows predate
+it?" can only be guessed at from timestamps.
 
 ### event
 
-Core event data — the primary table for the platform.
+| Column | Type | Notes |
+| --- | --- | --- |
+| `event_id` | serial | PK |
+| `source_post_id` | integer | FK → `source_post`. Null on rows imported from the recovered snapshot |
+| `source_account_id` | integer | FK → `source_account`. Also null on those rows |
+| `title` | text | NOT NULL |
+| `event_date` | date | NOT NULL |
+| `event_end_date` | date | |
+| `event_time`, `end_time` | text | `HH:MM`, 24-hour |
+| `description` | text | |
+| `venue_id` | integer | FK → `venue` |
+| `venue_name`, `venue_address` | text | Denormalised for display |
+| `venue_lat`, `venue_lng` | real | Denormalised for the map query |
+| `location_status` | `location_status` | |
+| `is_free` | boolean | |
+| `price`, `price_min`, `price_max` | real | |
+| `price_note` | text | Carries "free entrance, ₱500 consumable" |
+| `signup_url` | text | |
+| `category` | `event_category` | |
+| `artist` | jsonb | |
+| `event_status` | `event_status` | |
+| `availability_status` | `availability_status` | |
+| `is_recurring` | boolean | |
+| `recurrence_pattern` | text | |
+| `completeness_score` | real | Decides which row wins a hash collision |
+| `confidence` | real | The model's own |
+| `review_tier` | `review_tier` | Quality gate |
+| `image_url` | text | |
+| `source_username` | text | Denormalised; the only account link legacy rows have |
+| `event_hash` | text | UNIQUE — `sha256(title + date + venue)` |
+| `created_at`, `updated_at` | timestamptz | NOT NULL |
 
-| Column              | Type                | Constraints         | Description             |
-| ------------------- | ------------------- | ------------------- | ----------------------- |
-| id                  | serial              | PK                  |                         |
-| source_post_id      | integer             | FK → source_post    |                         |
-| source_account_id   | integer             | FK → source_account |                         |
-| venue_id            | integer             | FK → venue          | Linked venue            |
-| title               | text                | NOT NULL            | Event title             |
-| description         | text                |                     | Event description       |
-| event_date          | date                | NOT NULL            | Start date              |
-| event_end_date      | date                |                     | End date                |
-| event_time          | text                |                     | Start time (HH:MM)      |
-| end_time            | text                |                     | End time                |
-| venue_name          | text                |                     | Denormalized venue name |
-| venue_address       | text                |                     | Denormalized address    |
-| venue_lat           | real                |                     | Denormalized lat        |
-| venue_lng           | real                |                     | Denormalized lng        |
-| location_status     | location_status     | DEFAULT 'confirmed' |                         |
-| is_free             | boolean             | DEFAULT true        |                         |
-| price               | numeric(10,2)       |                     | Single price            |
-| price_min           | numeric(10,2)       |                     | Range min               |
-| price_max           | numeric(10,2)       |                     | Range max               |
-| price_notes         | text                |                     | E.g. "₱500 w/ 1 drink"  |
-| signup_url          | text                |                     | Registration link       |
-| category            | event_category      | DEFAULT 'other'     |                         |
-| artists             | jsonb               |                     | Artist names array      |
-| event_status        | event_status        | DEFAULT 'confirmed' |                         |
-| availability_status | availability_status | DEFAULT 'available' |                         |
-| is_recurring        | boolean             | DEFAULT false       |                         |
-| recurrence_pattern  | text                |                     | E.g. "every Saturday"   |
-| completeness_score  | numeric(3,2)        |                     | Data quality 0-1        |
-| confidence          | numeric(3,2)        |                     | AI confidence 0-1       |
-| review_tier         | review_tier         | DEFAULT 'pending'   |                         |
-| image_url           | text                |                     | Primary image           |
-| source_username     | text                |                     | Denormalized username   |
-| event_hash          | text                | UNIQUE              | Dedup key               |
-| created_at          | timestamptz         | DEFAULT now()       |                         |
-| updated_at          | timestamptz         | DEFAULT now()       |                         |
+`source_username` looks redundant next to `source_account_id` and is not.
+Rows imported from the recovered snapshot have only the username, and the
+duplicate-merge rule falls back to it — without that fallback a legacy
+row could never match its re-extracted twin.
 
 ### sub_event
 
-Multi-act lineups and schedules within an event.
+Multi-act lineups and screening schedules.
 
-| Column      | Type    | Constraints          | Description       |
-| ----------- | ------- | -------------------- | ----------------- |
-| id          | serial  | PK                   |                   |
-| event_id    | integer | FK → event, NOT NULL | Parent event      |
-| title       | text    | NOT NULL             | Act/schedule name |
-| event_date  | date    |                      | Sub-event date    |
-| event_time  | text    |                      | Start time        |
-| end_time    | text    |                      | End time          |
-| description | text    |                      |                   |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `sub_event_id` | serial | PK |
+| `event_id` | integer | FK → `event`, NOT NULL |
+| `title` | text | NOT NULL |
+| `event_date` | date | |
+| `event_time`, `end_time` | text | |
+| `description` | text | |
+| `created_at` | timestamptz | NOT NULL |
 
 ### account
 
-Platform accounts for authentication. Named `account` (not `user`) to avoid PostgreSQL reserved word.
+Platform users.
 
-| Column        | Type         | Constraints      | Description |
-| ------------- | ------------ | ---------------- | ----------- |
-| id            | serial       | PK               |             |
-| email         | varchar(255) | UNIQUE, NOT NULL |             |
-| username      | varchar(50)  | UNIQUE, NOT NULL |             |
-| password_hash | text         | NOT NULL         | bcrypt hash |
-| display_name  | text         |                  |             |
-| avatar_url    | text         |                  |             |
-| created_at    | timestamptz  | DEFAULT now()    |             |
-| updated_at    | timestamptz  | DEFAULT now()    |             |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `account_id` | serial | PK |
+| `email` | varchar | NOT NULL |
+| `username` | varchar | NOT NULL |
+| `password_hash` | text | NOT NULL, bcrypt |
+| `display_name`, `avatar_url` | text | |
+| `created_at`, `updated_at` | timestamptz | NOT NULL |
 
 ### saved_event
 
-Many-to-many relationship between accounts and events.
+Bookmarks. A merge repoints these at the surviving event rather than
+letting the cascade delete them.
 
-| Column     | Type        | Constraints            | Description |
-| ---------- | ----------- | ---------------------- | ----------- |
-| id         | serial      | PK                     |             |
-| account_id | integer     | FK → account, NOT NULL |             |
-| event_id   | integer     | FK → event, NOT NULL   |             |
-| saved_at   | timestamptz | DEFAULT now()          |             |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `saved_event_id` | serial | PK |
+| `account_id` | integer | FK → `account`, NOT NULL |
+| `event_id` | integer | FK → `event`, NOT NULL |
+| `saved_at` | timestamptz | NOT NULL |
 
 ### account_preference
 
-Account's preferred event categories.
-
-| Column               | Type        | Constraints                    | Description |
-| -------------------- | ----------- | ------------------------------ | ----------- |
-| id                   | serial      | PK                             |             |
-| account_id           | integer     | FK → account, UNIQUE, NOT NULL |             |
-| preferred_categories | jsonb       | DEFAULT '[]'                   |             |
-| updated_at           | timestamptz | DEFAULT now()                  |             |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `account_preference_id` | serial | PK |
+| `account_id` | integer | FK → `account`, NOT NULL |
+| `preferred_category` | jsonb | |
+| `updated_at` | timestamptz | NOT NULL |
 
 ### sync_log
 
-Tracks each ingest run from blead SQLite.
+One row per ingest run. See [ingest.md](ingest.md).
 
-| Column            | Type        | Constraints       | Description             |
-| ----------------- | ----------- | ----------------- | ----------------------- |
-| id                | serial      | PK                |                         |
-| started_at        | timestamptz | DEFAULT now()     |                         |
-| completed_at      | timestamptz |                   |                         |
-| status            | sync_status | DEFAULT 'running' |                         |
-| accounts_synced   | integer     | DEFAULT 0         |                         |
-| posts_synced      | integer     | DEFAULT 0         |                         |
-| events_synced     | integer     | DEFAULT 0         |                         |
-| venues_synced     | integer     | DEFAULT 0         |                         |
-| sub_events_synced | integer     | DEFAULT 0         |                         |
-| error_message     | text        |                   | Error details if failed |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `sync_log_id` | serial | PK |
+| `started_at` | timestamptz | NOT NULL |
+| `completed_at` | timestamptz | |
+| `status` | `sync_status` | NOT NULL |
+| `account_synced_count` | integer | |
+| `post_synced_count` | integer | |
+| `event_synced_count` | integer | |
+| `venue_synced_count` | integer | |
+| `sub_event_synced_count` | integer | |
+| `error_count` | integer | Rows that failed individually |
+| `unknown_category_count` | integer | Categories the taxonomy did not recognise |
+| `error_message` | text | |
+| `created_at` | timestamptz | NOT NULL |
 
----
+## Indexes
 
-## Key Indexes
+- `event.event_hash` — unique, dedup
+- `event.event_date`, `event.category`, `event.event_status`, `event.venue_id`, `event.source_account_id`
+- `source_post.shortcode` — unique
+- `source_account.username` — unique
+- `venue.name` — unique
+- `venue.geocode_attempted_at`
+- `saved_event(account_id, event_id)` — unique
 
-- `event.event_hash` — UNIQUE, deduplication
-- `event.event_date` — Range queries for upcoming events
-- `event.category` — Category filtering
-- `event.event_status` — Status filtering
-- `event.venue_id` — Venue lookups
-- `source_post.shortcode` — UNIQUE, dedup
-- `source_account.username` — UNIQUE, dedup
-- `venue.name` — UNIQUE, dedup
-- `saved_event(account_id, event_id)` — Unique bookmark pairs
+`venue.name` being unique is why the venue merge deletes losing rows
+before renaming the survivor: the winning name is often held by a loser.
 
 ## Relations
 
-- `event` → `venue` (many-to-one via `venue_id`)
-- `event` → `source_post` (many-to-one via `source_post_id`)
-- `event` → `source_account` (many-to-one via `source_account_id`)
-- `sub_event` → `event` (many-to-one via `event_id`)
-- `saved_event` → `account` + `event` (junction table)
+- `event` → `venue`, `source_post`, `source_account` (many-to-one)
+- `sub_event` → `event` (many-to-one)
+- `saved_event` → `account` + `event` (junction)
 - `account_preference` → `account` (one-to-one)
+
+## Migrations
+
+Versioned, under `package/db/migration/`. Generate with
+`npm run db:generate`, apply with `npm run db:migrate`. There was no
+migration history before the restructure, so no schema change was
+reversible.

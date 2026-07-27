@@ -6,7 +6,7 @@ description: How to add a new schema table to the WheresTheFX database
 
 ## Steps
 
-1. Open `server/src/db/schema.ts`
+1. Open `package/db/src/schema.ts`
 
 2. If you need a new enum, add it:
 
@@ -45,7 +45,7 @@ export const myTableRelation = relations(myTable, ({ one, many }) => ({
 5. Push the schema to PostgreSQL:
 
 ```bash
-cd /Users/angelonrevelo/Antigravity/wheresthefx/server && ./node_modules/.bin/drizzle-kit push
+cd /Users/angelonrevelo/Antigravity/wheresthefx/server && ./node_modules/.bin/npm run db:generate && npm run db:migrate
 ```
 
 ## Column Types Reference
@@ -79,9 +79,9 @@ tags: jsonb('tags').default([]),
 
 ## Related Files
 
-- Schema: `server/src/db/schema.ts`
+- Schema: `package/db/src/schema.ts`
 - Drizzle config: `server/drizzle.config.ts`
-- Connection: `server/src/db/connection.ts`
+- Connection: `package/db/src/client.ts`
 - Conventions: `docs/CONVENTIONS.md`
 
 ## Convention Notes

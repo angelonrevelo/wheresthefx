@@ -6,13 +6,13 @@ description: How to add a new API route to the WheresTheFX Express backend
 
 ## Steps
 
-1. Create a new route file at `server/src/routes/<name>.ts`:
+1. Create a new route file at `app/api/src/route/<name>.ts`:
 
 ```typescript
 import { Router, Request, Response } from "express";
 import { db } from "../db/connection.js";
 import { authenticate, optionalAuth } from "../middleware/auth.js";
-import * as schema from "../db/schema.js";
+import * as schema from "@wheresthefx/db";
 
 const router = Router();
 
@@ -31,18 +31,18 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
 export default router;
 ```
 
-2. Mount the route in `server/src/index.ts`:
+2. Mount the route in `app/api/src/index.ts`:
 
 ```typescript
-import newRoutes from "./routes/<name>.js";
+import newRoutes from "./route/<name>.js";
 // ...
 app.use("/api/<name>", newRoutes);
 ```
 
-3. If you need new database tables, update `server/src/db/schema.ts` and run:
+3. If you need new database tables, update `package/db/src/schema.ts` and run:
 
 ```bash
-cd server && ./node_modules/.bin/drizzle-kit push
+cd server && ./node_modules/.bin/npm run db:generate && npm run db:migrate
 ```
 
 ## Key Patterns
@@ -99,9 +99,9 @@ res.json({
 
 ## Related Files
 
-- Schema: `server/src/db/schema.ts`
-- Connection: `server/src/db/connection.ts`
-- Auth middleware: `server/src/middleware/auth.ts`
-- Snake case middleware: `server/src/middleware/snakeCase.ts`
-- Existing routes: `server/src/routes/`
+- Schema: `package/db/src/schema.ts`
+- Connection: `package/db/src/client.ts`
+- Auth middleware: `app/api/src/middleware/auth.ts`
+- Snake case middleware: `app/api/src/middleware/snakeCase.ts`
+- Existing routes: `app/api/src/route/`
 - Conventions: `docs/CONVENTIONS.md`

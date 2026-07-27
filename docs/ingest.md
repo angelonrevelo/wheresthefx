@@ -1,153 +1,191 @@
-# Ingest Pipeline: blead → WheresTheFX
+# Ingest pipeline
 
-## Overview
-
-The ingest pipeline synchronizes data from **blead** (Instagram scraper running on VPS) into the WheresTheFX PostgreSQL database. It's designed to run periodically (every 6 hours) or manually.
-
-## Data Flow
+The pipeline scrapes Instagram directly and writes to PostgreSQL. It runs
+in the same process as the API: `app/api/src/scheduler.ts` starts a
+scrape every `INGEST_INTERVAL_HOUR` hours. There is no cron, no SQLite
+intermediary, and no second machine.
 
 ```
-blead SQLite (ig-events.db)
-  │
-  ├─ known_venue   ──→  PostgreSQL venue
-  ├─ ig_account    ──→  PostgreSQL source_account
-  ├─ ig_post       ──→  PostgreSQL source_post
-  ├─ ig_event      ──→  PostgreSQL event
-  └─ sub_event     ──→  PostgreSQL sub_event
+Instagram  ──►  scrape  ──►  prefilter  ──►  extract  ──►  parse  ──►  store  ──►  geocode
 ```
 
-## Deduplication Strategy
+## First run
 
-Each table uses a **natural key** for dedup (not blead's internal auto-increment IDs):
-
-| Table          | Natural Key  | Strategy                      |
-| -------------- | ------------ | ----------------------------- |
-| venue          | `name`       | ON CONFLICT DO UPDATE         |
-| source_account | `username`   | ON CONFLICT DO UPDATE         |
-| source_post    | `shortcode`  | ON CONFLICT DO UPDATE         |
-| event          | `event_hash` | ON CONFLICT DO UPDATE         |
-| sub_event      | (none)       | DELETE + re-insert per parent |
-
-### Why no dependency on blead IDs?
-
-blead's auto-increment IDs can change if the SQLite database is rebuilt. By matching on natural keys (venue name, IG username, post shortcode, event content hash), the ingest pipeline is resilient to blead database resets.
-
-### event_hash
-
-The `event_hash` is a SHA256 computed by blead from:
-
-- Normalized event title (lowercased, trimmed)
-- Event date
-- Venue name (lowercased, trimmed)
-
-Two events with the same title, date, and venue are considered duplicates. When a conflict occurs, the record is updated with fresh data.
-
-## Running the Ingest
-
-### Manual (local development)
+The scraper needs a logged-in Instagram session. This is deliberately
+human-in-the-loop — the login is the step most likely to hit a checkpoint,
+and automating it makes that failure silent.
 
 ```bash
-BLEAD_DB_PATH=./data/ig-events.db \
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wheresthefx \
-npm run ingest --workspace @wheresthefx/api
+npm run ig:login --workspace @wheresthefx/ingest
 ```
 
-### Cron (production VPS)
+That opens a browser, waits for you to sign in, and caches the session at
+`IG_SESSION_PATH`. The session is a live credential and is gitignored.
+
+Then:
 
 ```bash
-# Every 6 hours. Hours are listed explicitly rather than as a step
-# expression so this line can be quoted inside block comments.
-0 0,6,12,18 * * * cd /path/to/wheresthefx && \
-  npm run ingest --workspace @wheresthefx/api >> /var/log/wheresthefx-ingest.log 2>&1
+npm run scrape --workspace @wheresthefx/ingest -- --limit 40
 ```
 
-### Via npm script
+## Stages
 
-```bash
-npm run ingest --workspace @wheresthefx/api
-```
+### Scrape
 
-### From blead (local → VPS → production, one command)
+`src/scraper/` drives Playwright with `fingerprint-injector` and reads
+Instagram's private v1 REST feed. Three tiers, most resilient first; the
+GraphQL `doc_id` tier rotates every few weeks and is the fragile one.
 
-```bash
-cd /Users/angelonrevelo/Antigravity/blead
-bash scripts/ig-events/sync-to-production.sh
-```
+Each pass selects the accounts least recently scraped, up to `--limit`,
+skipping any scraped within the last 20 hours. With ~200 accounts and the
+scheduler's limit of 40, a full sweep takes about a day, and any one
+account is checked roughly daily at about 13 posts deep.
 
-This rsyncs the local SQLite DB to VPS, runs ingest on VPS, and restarts the API.
+### Prefilter
 
-## Sync Logging
+`src/extractor/prefilter.ts` decides whether a caption is worth an
+extraction call. It is **anti-signal only**: it drops what is
+demonstrably not an event rather than guessing at what is.
 
-Every ingest run is logged to the `sync_log` table:
+An earlier positive-signal version was measured against 5,652 real
+captions and dropped 42.7% of genuine events.
 
-```sql
-SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 1;
-```
+### Extract
 
-| Column            | Description                         |
-| ----------------- | ----------------------------------- |
-| started_at        | When the sync started               |
-| completed_at      | When it finished                    |
-| status            | `running`, `completed`, or `failed` |
-| venues_synced     | Number of venues processed          |
-| accounts_synced   | Number of accounts processed        |
-| posts_synced      | Number of posts processed           |
-| events_synced     | Number of events processed          |
-| sub_events_synced | Number of sub-events processed      |
-| error_message     | Error details if status is `failed` |
+`src/extractor/backend.ts` speaks OpenAI-compatible chat completions over
+plain `fetch`, so the provider is swappable via `EXTRACT_BASE_URL`.
 
-## Performance
+The prompt lives in `src/prompt/extraction.ts` and carries
+`PROMPT_VERSION`, persisted per row on `source_post`. It returns a
+`{ system, user }` pair: the rules are trusted, the caption is not.
+Merging them let a caption reading "ignore previous instructions" set
+`isFree` and rewrite the title — reproduced on two models before the
+split.
 
-Typical sync times:
+Bump `PROMPT_VERSION` on any change, including a change to the context
+rather than the rules. Two runs with different known-venue lists are not
+comparable, and telling them apart afterwards is the point of recording a
+version.
 
-- **118 venues**: ~0.1s
-- **157 accounts**: ~0.2s
-- **1317 posts**: ~1.5s
-- **230 events**: ~0.5s
-- **178 sub-events**: ~0.2s
-- **Total**: ~3s
+### Parse
 
-## Error Handling
+`src/extractor/parse.ts` coerces and bounds every field. Nothing the
+model returns is trusted:
 
-- Failed syncs are logged to `sync_log` with the error message
-- The script exits with code 1 on failure (for cron monitoring)
-- SQLite is opened in read-only mode (cannot corrupt the source data)
+- dates outside a plausible window are dropped, not clamped
+- a price above ₱50,000 is a phone number
+- `price: 0` is not free; `isFree` says free
+- an unknown category surfaces as `null` plus the raw string rather than
+  being coerced to `other` — silent coercion is how five of twelve
+  categories were lost
+- a venue that is an Instagram handle, a bare room name, or a caption
+  fragment is dropped
 
-### Known limitations of this script
+### Store
 
-This is the legacy blead→Postgres bridge. It is being replaced by the
-in-house pipeline in `package/ingest`; until then, be aware:
+`src/store/event.ts`. Two tiers:
 
-- **There are no transactions.** The docstring claims transactional
-  batches; there are none anywhere in the repo. A mid-run failure leaves
-  the database half-ingested.
-- **Only posts and events have per-row error guards.** Venues, accounts,
-  and sub-events abort the whole run on a single bad row — the opposite
-  of what this document used to claim.
-- **Upserts are blind.** `ON CONFLICT DO UPDATE` sets all values
-  unconditionally, so a lower-confidence re-scrape overwrites a better
-  record despite the documented "higher completeness_score wins" rule.
-- **A destructive dedup pass runs at the end.** `runDedup` hard-`DELETE`s
-  fuzzy-matched duplicates, cascading through `saved_event` — a user's
-  bookmark disappears when their event loses a match. There is no audit
-  trail of what was removed.
-- **Geocoding is not wired in.** Newly ingested venues stay unmapped
-  until `geocode-venues.ts` is run by hand.
+1. **Content hash** — `eventHash(title, date, venue)`. On collision the
+   higher completeness score wins. The previous ingest set all values
+   unconditionally, so a low-confidence re-scrape overwrote a better row.
+2. **Fuzzy** — same date, and either a shared venue at 0.75 title
+   similarity or, when one side has no venue, the same source account at
+   0.90.
 
-## Image Handling
+The account comparison falls back to `source_username` when
+`source_account_id` is absent, because rows imported from the recovered
+snapshot never had an id.
 
-Images are **not** copied during ingest. Instead:
+### Geocode
 
-1. Events store Instagram CDN URLs (`image_url`)
-2. The `/api/events/map` and `/api/events` endpoints include `source_post_shortcode` and `source_post_url` from the joined `source_post` table
-3. The frontend builds proxy URLs: `/api/images/proxy?url=<cdn_url>&shortcode=<code>`
-4. The proxy checks **local cache first** (`BLEAD_IMAGES_PATH/{shortcode}/`) for instant response
-5. Falls back to CDN if no local copy exists (with 5s timeout)
-6. Local cache responses are cached for 7 days; CDN responses for 24 hours
+`src/geocode/` calls Nominatim inside the scrape run, rate-limited, and
+records `geocode_attempted_at` whether or not it succeeded so permanent
+failures stop being retried forever.
 
-This avoids duplicating image storage while ensuring images remain accessible even after CDN URLs expire (most do within hours).
+It refuses generic names and rejects coordinates outside Metro Manila.
+Nominatim answers every question it is asked: given "Activity Center" it
+returns a plausible point rather than nothing, which nearly put fourteen
+events at an invented location.
+
+## Commands
+
+All under `package/ingest/src/command/`. Every destructive one takes
+`--dry-run`, and most were written because a dry run showed something the
+code had got wrong.
+
+| Command | Purpose |
+| --- | --- |
+| `login.ts` | Cache an Instagram session, human-in-the-loop |
+| `scrape.ts` | The pipeline. `--limit N`, `--dry-run` |
+| `resolve-account.ts` | Cache numeric IG user ids; retire accounts that no longer resolve |
+| `reingest.ts` | One-off import of the recovered SQLite snapshot |
+| `reextract-legacy.ts` | Re-run extraction over the snapshot's captions with the current prompt |
+| `link-orphan-post.ts` | Attach imported posts to their watchlist accounts |
+| `merge-alias.ts` | Fold the curated venue aliases into the directory |
+| `merge-venue.ts` | Fold duplicate venue rows into one |
+| `merge-duplicate.ts` | Fold duplicate events the merge rule accepts |
+| `clear-handle-venue.ts` | Repair venue names that are Instagram handles |
+| `clear-nonvenue.ts` | Clear venue names that name no venue |
+| `verify-venue-pin.ts` | Cross-check coordinates against the OSM gazetteer. Reports only |
+| `audit-duplicate.ts` | Report near-duplicate events. Reports only |
+| `audit-watchlist.ts` | Report accounts whose events rarely resolve to a venue |
+
+`script/fetch-osm-venue.ts` rebuilds `fixture/osm-venue.json`, a
+gazetteer of ~13,500 named Metro Manila venues from OpenStreetMap
+Overpass. It is a second opinion on coordinates, not a source of truth:
+`verify-venue-pin` reports rather than fixes, because a name match cannot
+tell a misplaced venue from an unrelated namesake.
+
+## Cost
+
+`src/store/cost.ts` meters every run. Two mechanisms, in order of what
+they save:
+
+1. **Skip already-extracted posts**, keyed on a caption hash so an edited
+   post is still re-read. The scraper fetches the last N posts every run
+   and almost all were extracted last run. Re-extracting everything every
+   pass costs roughly $435/month; skipping brings it under $15.
+2. **Prices are recorded per model**, with a fallback rate, so an
+   estimate is never silently zero.
+
+Measured: **$0.0025 per post** on `gpt-4.1-mini`. The full 5,183-post
+re-extraction of the recovered snapshot cost **$12.97**.
+
+## Sync log
+
+Every run writes to `sync_log`.
+
+| Column | Description |
+| --- | --- |
+| `started_at`, `completed_at` | Run window |
+| `status` | `running`, `completed`, `failed` |
+| `account_synced_count` | Accounts visited |
+| `post_synced_count` | Posts processed |
+| `event_synced_count` | Events written |
+| `venue_synced_count` | Venues touched |
+| `sub_event_synced_count` | Sub-events written |
+| `error_count` | Rows that failed individually |
+| `unknown_category_count` | Categories the taxonomy did not recognise |
+| `error_message` | Set when `status` is `failed` |
+
+A run killed by a restart leaves `status = 'running'` forever, which the
+freshness check reads as "a sync is in progress". Mark abandoned rows
+failed rather than deleting them.
+
+## Images
+
+Images are not copied. Events store the Instagram CDN URL, and the client
+requests `/api/images/proxy?url=<cdn>&shortcode=<code>`.
+
+The proxy checks a local cache first if `BLEAD_IMAGES_PATH` is set, then
+falls back to the CDN. It is hardened: https only, a dot-anchored host
+allowlist, no IP literals, `redirect: 'manual'`, an 8MB cap and a
+Content-Type allowlist. It was previously an unauthenticated SSRF and an
+arbitrary file read.
 
 ## Conventions
 
-- All database columns use `snake_case` — see `docs/CONVENTIONS.md`
-- API responses are auto-converted to `snake_case` by `snakeCaseResponse` middleware
+Database columns are `snake_case`; see [CONVENTIONS.md](CONVENTIONS.md).
+API responses are shaped by explicit DTOs in `app/api/src/lib/dto.ts`,
+not by a transform middleware — the middleware was not injective
+(`imageURL` became `image_u_r_l`) and would have mangled JSONB payloads.
