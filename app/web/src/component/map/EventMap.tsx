@@ -4,6 +4,7 @@ import type { EventFilter } from "@/type/filter";
 import "leaflet/dist/leaflet.css";
 import { type LocationMarker } from "@/util/cluster";
 import { createEventMarkerIcon } from "@/util/markerIcon";
+import { installSmoothWheelZoom } from "@/util/smoothWheelZoom";
 import { EventPopup, EventSidePanel } from "@/component/event";
 import { useEventMarkers } from "@/hook/useEventMarkers";
 import { useIsMobile } from "@/hook/use-mobile";
@@ -70,6 +71,9 @@ export function EventMap({ filter, searchQuery }: EventMapProps) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    // Must run before `L.map`: Leaflet wires handlers at construction.
+    installSmoothWheelZoom();
+
     const map = L.map(containerRef.current, {
       // A first frame before the events load. It is immediately replaced
       // by a fit to the actual data — the map exists to show where events
@@ -89,11 +93,18 @@ export function EventMap({ filter, searchQuery }: EventMapProps) {
       inertiaDeceleration: 3000,
       inertiaMaxSpeed: Infinity,
       worldCopyJump: false,
-      zoomSnap: 1,
-      zoomDelta: 1,
-      wheelPxPerZoomLevel: 60,
-      wheelDebounceTime: 40,
-    });
+
+      // Wheel and trackpad zoom is handed to SmoothWheelZoom, so the
+      // native stepped handler is off. `zoomSnap: 0` is what lets the
+      // eased zoom settle on fractional levels instead of snapping to a
+      // whole one at the end of every gesture, and `zoomDelta` keeps the
+      // +/- buttons and double-click moving in fractions to match.
+      scrollWheelZoom: false,
+      smoothWheelZoom: true,
+      smoothSensitivity: 1.5,
+      zoomSnap: 0,
+      zoomDelta: 0.4,
+    } as L.MapOptions);
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       crossOrigin: true,
