@@ -1,53 +1,68 @@
 import L from "leaflet";
-import markerIcon from "@/assets/middle-finger-marker.png";
-import { getCategoryFilter } from "@/constant/categoryColors";
+import { CATEGORY_COLORS } from "@/constant/categoryColors";
 
-// Marker dimensions (match w-8 h-10 => 32x40)
-const ICON_W = 32;
+/**
+ * Map markers.
+ *
+ * These were a middle-finger PNG rotated 180 degrees and recoloured with a
+ * hand-tuned CSS `filter` chain per category — thirteen strings of
+ * `invert/sepia/saturate/hue-rotate` approximating hex values declared
+ * immediately above them in the same file. At 32x40 the rotated hand read
+ * as a smear rather than a pin, and a filter chain only ever gets close to
+ * the colour it is imitating.
+ *
+ * Drawn as SVG instead: the category colour is applied directly, the shape
+ * points at the thing it marks, and a dark outline keeps it legible
+ * against the dark basemap.
+ */
+
+const ICON_W = 30;
 const ICON_H = 40;
 
-// Coordinates for the center of the palm in the image (px from top-left)
-const PALM_X = 13.5; // horizontal center
-const PALM_Y = 14; // slightly above vertical center = palm area
+/** Multi-event pins grow a little so the count stays readable. */
+const CLUSTER_W = 38;
+const CLUSTER_H = 48;
 
-export function createMiddleFingerIcon(count: number, category: string = 'other'): L.DivIcon {
-  const hasCount = count > 1;
-  const filter = getCategoryFilter(category);
+function colorFor(category: string): string {
+  return CATEGORY_COLORS[category] ?? CATEGORY_COLORS.other;
+}
 
-  const iconHtml = `
-    <div class="relative select-none" style="width:${ICON_W}px;height:${ICON_H}px">
-      <img
-        src="${markerIcon}"
-        alt="Event marker"
-        class="absolute inset-0 w-full h-full block pointer-event-none"
-        style="filter: ${filter}; transform: rotate(180deg);"
-        aria-hidden="true"
-      />
-      ${
-        hasCount
-          ? `
-        <span
-          class="absolute leading-none text-white font-semibold"
-          style="
-            left:${PALM_X}px;
-            top:${PALM_Y}px;
-            transform:translate(-50%,-50%);
-            font-size:12px;
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
-            pointer-event:none;
-          "
-        >${count}</span>
-      `
-          : ""
-      }
+export function createEventMarkerIcon(count: number, category: string = "other"): L.DivIcon {
+  const isCluster = count > 1;
+  const width = isCluster ? CLUSTER_W : ICON_W;
+  const height = isCluster ? CLUSTER_H : ICON_H;
+  const fill = colorFor(category);
+  const label = count > 99 ? "99+" : String(count);
+
+  // The viewBox is fixed, so the geometry scales with the rendered size.
+  const html = `
+    <div style="width:${width}px;height:${height}px;position:relative;">
+      <svg viewBox="0 0 30 40" width="${width}" height="${height}"
+           xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
+           style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.55));">
+        <path d="M15 39C15 39 28 24.4 28 14.5 28 6.5 22.2 1 15 1S2 6.5 2 14.5C2 24.4 15 39 15 39Z"
+              fill="${fill}" stroke="rgba(10,10,14,.85)" stroke-width="1.75"/>
+        <circle cx="15" cy="14.5" r="${isCluster ? 8.5 : 4.6}" fill="rgba(10,10,14,.9)"/>
+      </svg>
+      ${isCluster ? `
+        <span style="position:absolute;left:50%;top:36.25%;transform:translate(-50%,-50%);
+                     color:#fff;font-weight:600;font-size:${count > 99 ? 10 : 12}px;line-height:1;
+                     font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+                     pointer-events:none;">${label}</span>
+      ` : ""}
     </div>
   `;
 
   return L.divIcon({
-    html: iconHtml,
-    className: "custom-marker", // keep this if you want to target the wrapper in CSS
-    iconSize: [ICON_W, ICON_H],
-    iconAnchor: [ICON_W / 2, ICON_H - 2], // anchor near the (rotated) tip; adjust if needed
-    popupAnchor: [0, -ICON_H + 6],
+    html,
+    className: "custom-marker",
+    iconSize: [width, height],
+    // The tip is the location, so the anchor sits at the bottom centre.
+    // The old icon anchored 2px short of it, which offset every pin.
+    iconAnchor: [width / 2, height],
+    popupAnchor: [0, -height + 6],
   });
 }
+
+/** Former name, kept so existing call sites keep working. */
+export const createMiddleFingerIcon = createEventMarkerIcon;

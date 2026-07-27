@@ -104,7 +104,7 @@ const Index = () => {
                 <span className="text-muted-foreground">?</span>
               </h1>
               <p className="text-muted-foreground text-lg">
-                Discover parties, thrift markets, and event in Quezon City
+                Discover parties, markets and gigs happening across Metro Manila
               </p>
             </div>
 
@@ -112,7 +112,7 @@ const Index = () => {
           </div>
 
           <footer className="absolute bottom-6 text-xs text-muted-foreground">
-            Currently serving Quezon City · More cities coming soon
+            Covering Metro Manila
           </footer>
         </div>
 

@@ -180,9 +180,9 @@ export const EventSidebar = () => {
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           {locationGranted
             ? userLocation
-              ? `Quezon City \u00b7 By distance${lastUpdate ? ` \u00b7 ${lastUpdate}` : ""}`
-              : "Quezon City \u00b7 Location denied"
-            : "Enable location to see event near you"}
+              ? `Metro Manila \u00b7 By distance${lastUpdate ? ` \u00b7 ${lastUpdate}` : ""}`
+              : "Metro Manila \u00b7 Location denied"
+            : "Enable location to see events near you"}
         </p>
 
         <div className="relative">
